@@ -131,6 +131,9 @@ class TestRandomizedControl(unittest.TestCase):
                                  n_shuffles=60, seed=11, verbose=False)
         self.assertEqual(rep["verdict"], "BEATS_SHUFFLED_NULL")
         self.assertLess(rep["p_value"], 0.05)
+        # the full null distribution is reported so clients can judge the evidence
+        for key in ("p25", "p50", "p75", "p95", "p99", "null", "shuffled_mean"):
+            self.assertIn(key, rep)
 
     def test_noise_does_not(self):
         df = D.noise_df()

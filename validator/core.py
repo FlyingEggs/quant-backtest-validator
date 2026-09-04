@@ -64,11 +64,29 @@ AUDIT_V = ("PASS", "CONDITIONAL PASS", "FAIL", "INSUFFICIENT")
 
 
 def _chi2_sf(x: float, df: int) -> float:
-    """chi2 survival P(X > x) — Wilson-Hilferty normal approximation (no scipy needed)."""
+    """chi2 survival P(X > x).
+
+    Uses scipy.stats.chi2.sf when scipy is importable (exact), otherwise falls back to
+    the Wilson-Hilferty normal approximation. A validator must not depend on the
+    quality of a normal approximation in small-df tails, so scipy is preferred when
+    present; dependency-light environments keep working via the fallback.
+    """
+    global _SCIPY_CHI2_SF
+    if _SCIPY_CHI2_SF is None:
+        try:
+            from scipy import stats as _stats
+            _SCIPY_CHI2_SF = _stats.chi2.sf
+        except Exception:
+            _SCIPY_CHI2_SF = False
+    if _SCIPY_CHI2_SF is not False:
+        return float(_SCIPY_CHI2_SF(float(x), int(df)))
     if x <= 0.0:
         return 1.0
     z = ((x / df) ** (1.0 / 3.0) - (1.0 - 2.0 / (9.0 * df))) / math.sqrt(2.0 / (9.0 * df))
     return 0.5 * math.erfc(z / math.sqrt(2.0))
+
+
+_SCIPY_CHI2_SF = None  # lazily resolved: None=unknown, False=unavailable, callable=ready
 
 
 def _pnl(res: Dict) -> float:
@@ -270,7 +288,7 @@ def randomized_control(df: pd.DataFrame, col: str, bt: _BacktestFn,
     if len(arr) == 0:
         return {"verdict": "NO_EDGE_VS_SHUFFLED_NULL", "note": "all shuffles failed",
                 "seed": used_seed}
-    pct = {p: float(np.percentile(arr, p)) for p in (50, 95)}
+    pct = {p: float(np.percentile(arr, p)) for p in (25, 50, 75, 95, 99)}
     percentile = float(np.mean(arr < real_pnl) * 100.0)
     p_value = (float(np.sum(arr >= real_pnl)) + 1.0) / (len(arr) + 1.0)
     if real_pnl > pct[95] and p_value < RC_ALPHA:
@@ -283,7 +301,10 @@ def randomized_control(df: pd.DataFrame, col: str, bt: _BacktestFn,
            "real_trades": real_tr,
            "shuffled_mean": round(float(np.mean(arr)), 4),
            "shuffled_std": round(float(np.std(arr)), 4),
-           "p50": round(pct[50], 4), "p95": round(pct[95], 4),
+           "null": {str(p): round(pct[p], 4) for p in (25, 50, 75, 95, 99)},
+           "p25": round(pct[25], 4), "p50": round(pct[50], 4),
+           "p75": round(pct[75], 4), "p95": round(pct[95], 4),
+           "p99": round(pct[99], 4),
            "percentile": round(percentile, 1), "p_value": round(p_value, 4),
            "n_shuffles": len(arr), "failed_shuffles": failed, "seed": used_seed,
            "interpretation": (
@@ -323,13 +344,16 @@ def return_independence(rets: Sequence[float], max_lag: int = AC_MAX_LAG,
     n = len(x)
     if n == 0 or n < AC_MIN_N:
         return {"verdict": "INSUFFICIENT", "n": n, "n_eff": None}
-    rho = _acf(x, max_lag)
+    # Adaptive lag order: for small samples a full 10-lag Ljung-Box is over-parameterised
+    # (too many df for the data). Cap at min(AC_MAX_LAG, n//5) with an n-2 safety bound.
+    L = int(min(max_lag, n - 2, max(1, n // 5)))
+    rho = _acf(x, L)
     # Ljung-Box: squared rho (detection)
-    q = n * (n + 2) * float(np.sum((rho[1:] ** 2) / (n - np.arange(1, max_lag + 1))))
-    lb_p = float(_chi2_sf(q, max_lag))
-    sig = [int(k) for k in range(1, max_lag + 1) if abs(rho[k]) > 1.96 / math.sqrt(n)]
+    q = n * (n + 2) * float(np.sum((rho[1:] ** 2) / (n - np.arange(1, L + 1))))
+    lb_p = float(_chi2_sf(q, L))
+    sig = [int(k) for k in range(1, L + 1) if abs(rho[k]) > 1.96 / math.sqrt(n)]
     # ESS of the mean: LINEAR rho inflation factor
-    infl = 1.0 + 2.0 * float(np.sum((1.0 - np.arange(1, max_lag + 1) / n) * rho[1:]))
+    infl = 1.0 + 2.0 * float(np.sum((1.0 - np.arange(1, L + 1) / n) * rho[1:]))
     n_eff = n / infl if infl > 0 else float(n)
     n_eff = min(n_eff, float(n))
     verdict = "AUTOCORRELATED" if lb_p < 0.05 else "INDEPENDENT"

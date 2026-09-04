@@ -45,16 +45,22 @@ Severity: **P0** = result-distorting · **P1** = materially uncertain / needs re
   (CONDITIONAL PASS + manual construction/timestamp review), never an automatic FAIL.
   *Measured:* for a legitimate 1-bar-horizon signal, a one-bar signal lag and a one-bar fill
   delay are mathematically the **same** perturbation (~70% of the edge in both cases).
-- **Fill-timing FAIL is graded by retention.** If shifting fills one bar later leaves **<10%**
-  of profit, fills were effectively same-bar (P0). A 10–50% retention is consistent with a
-  legitimate short holding horizon and is P1 review.
+- **Fill-timing FAIL is graded by retention, and is a *perturbation test*, not an
+  execution certificate.** Shifting fill prices one bar later re-runs the strategy; a
+  <10% retention is consistent with same-bar fills (corroborate with an execution model
+  before declaring look-ahead), 10–50% with a legitimately short holding horizon (P1
+  review). The mechanics mutate the price series, so results are *sensitivity evidence*
+  to investigate — never a standalone "execution confirmed valid".
 - **Randomized control compares against the signal's own time-shuffled null** (same value set,
   timing destroyed; the null keeps average long exposure). Verdicts are
   `BEATS_SHUFFLED_NULL` / `WEAK_VS_SHUFFLED_NULL` / `NO_EDGE_VS_SHUFFLED_NULL` — evidence of
-  timing information beyond static exposure, **not** a standalone alpha certificate.
+  timing information beyond static exposure, **not** a standalone alpha certificate. The full
+  null distribution (p25/p50/p75/p95/p99, mean, MC p-value, percentile) is reported so the
+  client can judge the evidence directly.
 - **N_eff is the effective sample size of the mean** (linear-rho inflation factor
   `1 + 2 Σ (1-k/n) ρ_k`, Kass et al. 1998). Autocorrelation *detection* uses Ljung-Box
-  (squared rho) — different questions, different formulas.
+  (squared rho, adaptive lag order `min(10, n//5)` for small samples; scipy's exact chi2
+  when available, Wilson–Hilferty fallback otherwise). Different questions, different formulas.
 
 ## Reproducible demo output (`examples/demo.py`, deterministic)
 
