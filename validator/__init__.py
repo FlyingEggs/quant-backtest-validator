@@ -8,9 +8,11 @@ from validator.core import (
     fill_timing_sensitivity,
     randomized_control,
     return_independence,
+    save_report,
+    to_jsonable,
 )
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 __all__ = [
     "EXPANSION_HOURS",
     "full_audit",
@@ -19,5 +21,7 @@ __all__ = [
     "fill_timing_sensitivity",
     "randomized_control",
     "return_independence",
+    "save_report",
+    "to_jsonable",
     "__version__",
 ]

@@ -1,4 +1,4 @@
-"""examples/demo.py — run the validator on five reproducible archetypes.
+"""examples/demo.py — run the validator on six reproducible archetypes.
 
 Deterministic (fixed seeds). Prints the tables used in the README and case study.
 Run from the repository root:
@@ -110,7 +110,7 @@ def daily_signal_df(days: int = 80, bars_per_day: int = 48) -> pd.DataFrame:
 
 
 def regime_trend_df(n: int = 3000, seed: int = 11) -> pd.DataFrame:
-    """Slow regime trend — used for the randomized-control EDGE demonstration."""
+    """Slow regime trend — used for the clean-PASS and shuffle-control demonstrations."""
     rng = np.random.default_rng(seed)
     ret = rng.normal(0.0002, 0.0015, n)
     for d in range(0, n // 48, 20):
@@ -124,6 +124,39 @@ def regime_trend_df(n: int = 3000, seed: int = 11) -> pd.DataFrame:
     e60 = pd.Series(closes).ewm(span=60, adjust=False).mean().shift(1)
     df["sig"] = np.where(e20 > e60, 1.0, -1.0)
     return df
+
+
+def markov_short_df(n: int = 20000, q: float = 0.65, seed: int = 1) -> pd.DataFrame:
+    """A LEGITIMATE 1-bar-horizon signal: sign of today's move predicts tomorrow's move
+    (sign-persistence q=0.65), entered at next open, exited at the following open.
+
+    Deliberately short-horizon: both a 1-bar signal lag and a 1-bar fill delay destroy
+    ~70% of the edge. The engine must NOT auto-fail this — it reports CONDITIONAL PASS
+    and asks for execution-semantics review (short horizon is legal, same-bar is not).
+    """
+    rng = np.random.default_rng(seed)
+    s = np.empty(n)
+    s[0] = 1.0
+    for i in range(1, n):
+        s[i] = s[i - 1] if rng.random() < q else -s[i - 1]
+    rets = s + rng.normal(0.0, 0.5, n)
+    closes = np.cumsum(rets)
+    df = frame(closes)
+    df["sig"] = np.sign(closes - df["open"].to_numpy())     # sign of the bar's move
+    return df
+
+
+def markov_bt(df: pd.DataFrame) -> dict:
+    """Legal next-open, 1-bar horizon: enter at open[i+1] on +1 signal, exit open[i+2]."""
+    sig = df["sig"].fillna(0).to_numpy()
+    o = df["open"].to_numpy()
+    n = len(df)
+    pnl, trades = 0.0, 0
+    for i in range(n):
+        if sig[i] > 0 and i + 2 < n:
+            pnl += o[i + 2] - o[i + 1]
+            trades += 1
+    return {"pnl": pnl, "trades": trades, "rets": np.full(trades, 0.01)}
 
 
 def noise_df(n: int = 3000, seed: int = 21) -> pd.DataFrame:
@@ -155,31 +188,45 @@ def banner(title: str) -> None:
     print("#" * 62)
 
 
+def issue_counts(aud: dict):
+    p0 = sum(1 for i in aud["issues"] if i["severity"] == "P0")
+    p1 = sum(1 for i in aud["issues"] if i["severity"] == "P1")
+    return p0, p1
+
+
 def main() -> None:
-    # --- 1. honest next-open trend: gates clean with confirmed per-bar semantics ------
-    banner("1) Honest next-open trend strategy  ->  PASS (gate checks)")
+    # --- 1. honest next-open trend: PASS ----------------------------------------------
+    banner("1) Honest next-open trend strategy  ->  PASS")
     df = regime_trend_df()
     aud = full_audit(df, "sig", next_open_hold(5), bar_seconds=300,
-                     expansion_confirmation="completed",   # continuous trailing EMA sign:
-                     seed=11, verbose=True)                # analyst confirms per-bar semantics
-    print(f"   verdict: {aud['verdict']}   (problems: {len(aud['problems'])}, "
-          f"warnings: {len(aud['warnings'])})")
-    print(f"   note: expansion SUSPECT is resolved by an explicit 'completed' confirmation "
-          f"(signal is recomputed every bar from trailing data); the other gates are clean")
-    print(f"   note: randomized control EDGE_CONFIRMED and independence are informational")
+                     expansion_confirmation="completed",   # trailing EMA sign: analyst
+                     seed=11, verbose=True)                # confirms per-bar semantics
+    p0, p1 = issue_counts(aud)
+    print(f"   verdict: {aud['verdict']}   (P0={p0}, P1={p1}, "
+          f"issues={len(aud['issues'])}, warnings={len(aud['warnings'])})")
 
-    # --- 2. same-bar fill leak: lag PASS but fill-timing FAIL ----------------------
-    banner("2) Same-bar confirmation + same-bar fill  ->  caught by fill-timing only")
+    # --- 2. legitimate 1-bar-horizon signal: CONDITIONAL PASS (not auto-FAIL) ---------
+    banner("2) Legitimately short-horizon signal (1-bar edge)  ->  CONDITIONAL PASS")
+    dfm = markov_short_df()
+    audm = full_audit(dfm, "sig", markov_bt, bar_seconds=300, seed=5, verbose=True)
+    p0m, p1m = issue_counts(audm)
+    print(f"   verdict: {audm['verdict']}   (P0={p0m}, P1={p1m})")
+    print(f"   note: lag AND fill both collapse ~70% - for a 1-bar-horizon signal the two "
+          f"shifts are the same perturbation, so this is reported CONDITIONAL (manual "
+          f"execution-semantics review), never auto-FAIL")
+
+    # --- 3. same-bar fill leak: lag STABLE but fill-timing FAIL ----------------------
+    banner("3) Same-bar confirmation + same-bar fill  ->  FAIL (fill-timing, P0)")
     df2 = same_bar_leak_df()
     lag2 = lag_sensitivity(df2, "sig", same_bar_bt, verbose=True)
     fill2 = fill_timing_sensitivity(df2, same_bar_bt, verbose=True)
-    print(f"   verdict: signal column is {lag2['verdict']} under lag, but "
-          f"fill-timing is {fill2['verdict']} -> execution-level look-ahead")
-    print(f"   (the column itself is a slow step; its period expansion would be "
-          f"SUSPECT too — that is archetype 3's job)")
+    print(f"   signal column is {lag2['verdict']} under lag, but fill-timing is "
+          f"{fill2['verdict']} -> execution-level look-ahead")
+    print(f"   (the column itself is a slow step; its period expansion would be SUSPECT "
+          f"too - a separate gate, see next block)")
 
-    # --- 3. daily label at bar level: period expansion is a hard gate ---------------
-    banner("3) Day-level signal reused at 5-min bar level  ->  FAIL without confirmation")
+    # --- 4. daily label at bar level: period expansion is a hard gate ----------------
+    banner("4) Day-level signal reused at 5-min bar level  ->  FAIL without confirmation")
     df3 = daily_signal_df()
     exp3 = period_expansion(df3, "sig", bar_seconds=300, verbose=True)
     aud3 = full_audit(df3, "sig", next_open_hold(5), bar_seconds=300,
@@ -190,8 +237,8 @@ def main() -> None:
     print(f"   with    explicit 'completed' confirmation      -> verdict: {aud3b['verdict']} "
           f"(expansion no longer blocks; the analyst must be able to justify it)")
 
-    # --- 4. randomized control: edge vs beta ---------------------------------------
-    banner("4) Randomized control: real edge vs bull-market beta")
+    # --- 5. randomized control vs the shuffled null ----------------------------------
+    banner("5) Randomized control: signal vs its time-shuffled null")
     dft = regime_trend_df()
     rc_edge = randomized_control(dft, "sig", next_open_hold(5), n_shuffles=200,
                                  seed=11, verbose=True)
@@ -202,13 +249,16 @@ def main() -> None:
           f"p95 {rc_edge['p95']:,.0f}, percentile {rc_edge['percentile']}%)")
     print(f"   noise signal : {rc_noise['verdict']}  (real {rc_noise['real_pnl']:,.0f} vs "
           f"p50 {rc_noise['p50']:,.0f}, p={rc_noise['p_value']})")
+    print(f"   note: the null keeps the average long exposure - it controls static-beta; "
+          f"it is NOT a standalone alpha proof")
 
-    # --- 5. overlapping returns: N_eff ---------------------------------------------
-    banner("5) Return independence: '400 trades' that behave like ~90")
+    # --- 6. overlapping returns: N_eff (linear-rho ESS of the mean) ------------------
+    banner("6) Return independence: '400 trades' that behave like ~50")
     for label, x in (("AR(1) rho=0.8 (overlapping)", ar1_rets()),
                      ("white noise (independent)", np.random.default_rng(99).normal(0, 1, 400))):
         rep = return_independence(x, verbose=True)
-        print(f"   {label}: {rep['verdict']}  n={rep['n']} -> N_eff={rep['n_eff']}")
+        print(f"   {label}: {rep['verdict']}  n={rep['n']} -> N_eff={rep['n_eff']} "
+              f"(inflation x{rep['inflation_factor']})")
 
     print("\nDone. All outputs are deterministic (fixed seeds).")
 

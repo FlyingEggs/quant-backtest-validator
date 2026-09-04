@@ -4,77 +4,114 @@
 
 A small, dependency-light reference implementation of the *mechanistic* checks that separate a
 trustworthy backtest from an overstated one. Pure functions over a DataFrame + a strategy
-function — no exchange, no data vendor, no strategy parameters to leak.
+function — no exchange, no data vendor, no hidden strategy parameters.
 
-- Python ≥ 3.9 · numpy + pandas only · deterministic (fixed seeds)
-- MIT licensed
+- Python ≥ 3.9 · numpy + pandas only · deterministic (fixed seeds) · MIT licensed
 
 ```bash
-python3 examples/demo.py                      # run the five archetypes
-python3 -m unittest discover -s tests -v      # 11 unit tests
+python3 examples/demo.py                      # run the six archetypes
+python3 -m unittest discover -s tests -v      # 19 unit tests
 ```
 
 ## Why backtests overstate performance
 
 | Channel | How it inflates | Mechanistic check |
 |---|---|---|
-| Look-ahead bias | Signal uses the same bar's close, fills at that close | **Lag sensitivity** — shift the signal 1 bar; edge collapse ⇒ look-ahead |
-| Same-bar / intraday fills | "I enter immediately" — but the bar isn't closed | **Fill-timing** — shift fills 1 bar later; collapse ⇒ impossible fills |
-| Low-frequency column at bar level | A daily label repeated on every intraday bar | **Period expansion** — longest constant run ⇒ SUSPECT, hard gate |
-| β as alpha | Random longs also made money in this bull market | **Randomized control** — permutation test, real PnL vs random |
-| Overlapping positions | 400 trades that behave like ~90 | **Return independence** — Ljung-Box + ACF + N_eff |
+| Look-ahead / future functions | Signal uses the same bar's close, fills at that close | **Lag sensitivity** — shift the signal 1 bar |
+| Same-bar / intraday fills | "I enter immediately" — but the bar isn't closed | **Fill-timing** — shift fills 1 bar later |
+| Low-frequency column at bar level | A daily label repeated on every intraday bar | **Period expansion** — constant-run hard gate |
+| Static-exposure beta as alpha | Random longs also made money in this bull market | **Randomized control** — time-shuffled null |
+| Overlapping positions | 400 correlated trades reported as 400 samples | **Return independence** — Ljung-Box + N_eff |
 
-## What the code does
+## Verdict model
 
-`validator/core.py` exposes five standalone engines plus a `full_audit` synthesizer:
+A full audit returns **PASS / CONDITIONAL PASS / FAIL / INSUFFICIENT** with a **P0–P4 issue log**:
 
-- `lag_sensitivity(df, col, bt, lag)` — re-run with the state column shifted; PASS/WARN/FAIL.
-- `period_expansion(df, col, bar_seconds)` — longest constant run in hours ⇒ SUSPECT/OK.
-- `fill_timing_sensitivity(df, bt)` — shift every fill price one bar; collapse ⇒ FAIL.
-- `randomized_control(df, col, bt, n_shuffles, seed)` — EDGE_CONFIRMED / EDGE_WEAK / NO_EDGE.
-- `return_independence(rets)` — AUTOCORRELATED (N_eff << n) / INDEPENDENT / INSUFFICIENT.
-- `full_audit(...)` — gate synthesis → **PASS / FAIL**, with problems + informational warnings.
+| Verdict | Meaning |
+|---|---|
+| PASS | no P0/P1 findings |
+| CONDITIONAL PASS | no P0, but P1 evidence needing manual confirmation (e.g. lag-dependence) |
+| FAIL | ≥1 P0 finding (execution look-ahead, unconfirmed low-frequency expansion, non-next-open entry) |
+| INSUFFICIENT | no trades in baseline — not assessable |
 
-A strategy is any **pure** function `bt(df) -> {"pnl": float, "trades": int[, "rets": array]}`.
+Severity: **P0** = result-distorting · **P1** = materially uncertain / needs review ·
+**P2/P3** = conventions & hygiene · **P4** = polish. Full report is a JSON-serializable dict
+(`validator.save_report`).
 
-## Reproducible demo output
+## Epistemology (what the checks do — and don't — prove)
+
+- **Lag collapse is evidence, not proof.** A genuinely short-horizon strategy also loses money
+  when its signal is one bar stale. That is why lag-dependence is reported P1
+  (CONDITIONAL PASS + manual construction/timestamp review), never an automatic FAIL.
+  *Measured:* for a legitimate 1-bar-horizon signal, a one-bar signal lag and a one-bar fill
+  delay are mathematically the **same** perturbation (~70% of the edge in both cases).
+- **Fill-timing FAIL is graded by retention.** If shifting fills one bar later leaves **<10%**
+  of profit, fills were effectively same-bar (P0). A 10–50% retention is consistent with a
+  legitimate short holding horizon and is P1 review.
+- **Randomized control compares against the signal's own time-shuffled null** (same value set,
+  timing destroyed; the null keeps average long exposure). Verdicts are
+  `BEATS_SHUFFLED_NULL` / `WEAK_VS_SHUFFLED_NULL` / `NO_EDGE_VS_SHUFFLED_NULL` — evidence of
+  timing information beyond static exposure, **not** a standalone alpha certificate.
+- **N_eff is the effective sample size of the mean** (linear-rho inflation factor
+  `1 + 2 Σ (1-k/n) ρ_k`, Kass et al. 1998). Autocorrelation *detection* uses Ljung-Box
+  (squared rho) — different questions, different formulas.
+
+## Reproducible demo output (`examples/demo.py`, deterministic)
 
 ```
-1) Honest next-open trend (per-bar semantics confirmed "completed")
-   full audit -> PASS      (lag & fill clean; expansion confirmed; RC EDGE_CONFIRMED informational)
+1) Honest next-open trend (EMA trailing signal, confirmed semantics)
+   -> PASS            lag STABLE · fill PASS · expansion confirmed ·
+                      RC BEATS_SHUFFLED_NULL (informational)
 
-2) Same-bar confirmation + same-bar fill        <- execution look-ahead
-   lag sensitivity : PASS     (signal column itself is clean)
-   fill-timing     : FAIL     pnl 17,319,566 -> 22.7   (~100% of profit was intraday)
+2) Legitimate 1-bar-horizon signal
+   -> CONDITIONAL PASS   lag LAG_DEPENDENT (P1) · fill retains 31% (P1)
+                          a legal fast strategy is never auto-FAILED
 
-3) Day-level signal reused at 5-min bars        <- period expansion
-   without confirmation -> FAIL  (longest constant run 720 bars = 60h)
-   with 'completed'     -> PASS  (the analyst must be able to justify it)
+3) Same-bar confirmation + same-bar fill
+   -> FAIL (P0)  lag STABLE, but fill-timing pnl 17,319,566 -> 22.7
+                  (<0.01% retained = fills knew the bar before it closed)
 
-4) Randomized control (200 shuffles)
-   trend signal : EDGE_CONFIRMED   real 48,884 vs random p95 4,093 (p=0.005)
-   noise signal : NO_EDGE          real  2,238 vs random p50 2,402 (p=0.786)
+4) Day-level signal reused at 5-min bars
+   -> FAIL (P0)  without confirmation (longest run 720 bars = 60h)
+   -> PASS       with explicit 'completed' confirmation
 
-5) Return independence
-   AR(1) rho=0.8 overlapping trades : AUTOCORRELATED  n=400 -> N_eff=88
-   white noise                       : INDEPENDENT     n=400 -> N_eff=379
+5) Randomized control vs shuffled null (200 shuffles)
+   trend signal : BEATS_SHUFFLED_NULL   real 48,884 vs p95 4,093 (p=0.005)
+   noise signal : NO_EDGE_VS_SHUFFLED_NULL  real 2,238 vs p50 2,402 (p=0.786)
+
+6) Return independence (linear-rho N_eff)
+   AR(1) rho=0.8 overlapping trades : AUTOCORRELATED  400 -> N_eff=53
+   white noise                      : INDEPENDENT     400 -> N_eff=400
 ```
 
-Every number above is produced by running this repository's `examples/demo.py`
-(deterministic seeds) — not by a private engine.
+Every number above is produced by running this repository — no private engine involved.
+
+## Fill-timing scope note
+
+This check shifts the fill-relevant price columns (default `open`; pass `high/low/close` too if
+your stops/limits touch them) and injects a `__fill_shifted__` marker so path-dependent
+strategies can delay exit scans. A full intrabar execution model (stop/limit simulation,
+slippage, partial fills) is a separate module on the roadmap, not part of this check.
 
 ## Coverage vs. the full audit methodology
 
-This repository implements the **mechanistic core** (the five engines above). A full client
-methodology also covers OOS splits, walk-forward, parameter sensitivity sweeps, cost/funding
-models, and live-vs-backtest execution review — performed per engagement with bespoke tooling.
-See `docs/methodology_backtest_validation.md` for the end-to-end framework this core feeds into.
+This repository implements the **mechanistic core**. A client engagement additionally covers data
+integrity, cost/funding models, OOS, walk-forward, parameter robustness, and live-vs-backtest
+parity — see `docs/methodology_backtest_validation.md`. Architecture direction:
+
+```
+Quant Backtest Validator
+├── Core Engine        (this repo: lookahead · execution · expansion · control · independence)
+├── Audit Modules      (data · cost · OOS · walk-forward · robustness · live parity)
+├── Report Engine      (three-tier verdict · P0-P4 issue log · JSON)
+└── Certification      (signature / no-signature-no-deployment)
+```
 
 ## Honesty notes
 
-- All data is **synthetic**. The engines demonstrate *mechanisms*, not market alpha.
-- This is a reference implementation for validation methodology — it is not the production
-  engine behind any specific strategy, and it makes no claims about future returns.
+- All data is **synthetic**; the engines demonstrate *mechanisms*, not market alpha.
+- Reference implementation for validation methodology — not the production engine behind any
+  specific strategy; makes no claims about future returns.
 - Audit ≠ investment advice.
 
 ## License
