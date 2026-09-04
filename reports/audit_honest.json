@@ -1,8 +1,19 @@
 {
-  "engine_version": "2.0.0",
+  "engine_version": "2.1.0",
   "strategy": "EMA-trend (next-open, hold 5)",
   "overall": "PASS",
+  "audit_complete": false,
+  "verified_score": 96,
   "reliability_score": 96,
+  "coverage_pct": 86,
+  "not_verified": [
+    "MTF"
+  ],
+  "blocking": {
+    "P0": 0,
+    "P1": 0,
+    "P2": 0
+  },
   "sections": {
     "Data Integrity": {
       "status": "PASS",
@@ -59,21 +70,22 @@
       "status": "PASS",
       "issues": [],
       "notes": [
-        "OOS consistent: IS 32,614 / OOS 16,106 (69 trades)",
+        "OOS ran on a cold slice (df[split:]) - indicator strategies may suffer cold-start; set Strategy.supports_from_bar=True for warm-up-context OOS",
+        "OOS consistent (normalized): IS pnl/trade 142 (229 trades) vs OOS 233 (69 trades)",
         "parameter sensitivity NOT VERIFIED (needs run(df, params) + param_grid)"
       ]
     },
     "Costs": {
-      "status": "PASS",
+      "status": "DECLARED",
       "issues": [
         {
-          "code": "COST_MODEL",
+          "code": "COST_DECLARED",
           "severity": "P3",
-          "finding": "cost assumptions declared: fee 4.0 bps/side, slippage 2.0 bps - not independently verified"
+          "finding": "cost assumptions declared: fee 4.0 bps/side, slippage 2.0 bps - independent verification NOT PERFORMED (venue schedule/funding/liquidity)"
         }
       ],
       "notes": [
-        "costs declared but not yet independently re-run; module roadmap"
+        "declared, not verified - set cost.independently_verified only after an independent re-run"
       ]
     },
     "MTF": {
@@ -92,28 +104,25 @@
   },
   "issues": [
     {
-      "code": "MTF_MODULE",
-      "severity": "P4",
-      "finding": "multi-timeframe alignment module is on the roadmap - MTF leakage not assessed",
-      "section": "MTF"
-    },
-    {
       "code": "PERIOD_EXPANSION_CONFIRMED",
       "severity": "P3",
       "finding": "expansion SUSPECT resolved by explicit confirmation",
       "section": "Look-ahead"
     },
     {
-      "code": "COST_MODEL",
+      "code": "COST_DECLARED",
       "severity": "P3",
-      "finding": "cost assumptions declared: fee 4.0 bps/side, slippage 2.0 bps - not independently verified",
+      "finding": "cost assumptions declared: fee 4.0 bps/side, slippage 2.0 bps - independent verification NOT PERFORMED (venue schedule/funding/liquidity)",
       "section": "Costs"
+    },
+    {
+      "code": "MTF_MODULE",
+      "severity": "P4",
+      "finding": "multi-timeframe alignment module is on the roadmap - MTF leakage not assessed",
+      "section": "MTF"
     }
   ],
-  "not_verified": [
-    "MTF"
-  ],
-  "recommendation": "No blocking findings in the implemented checks. Treat NOT VERIFIED sections as open before deployment decisions.",
+  "recommendation": "No blocking findings in the VERIFIED scope, but the audit is INCOMPLETE (coverage 86%; NOT VERIFIED: MTF). Do not treat as full validation until those sections are checked.",
   "config_summary": {
     "seed": 11,
     "n_shuffles": 200,

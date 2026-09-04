@@ -17,7 +17,7 @@ print(audit_text(strategy, df, ...))
 ```bash
 python3 examples/audit_demo.py                   # two full client-style reports -> ./reports/
 python3 examples/demo.py                         # six mechanistic archetypes (primitives)
-python3 -m unittest discover -s tests -v         # 27 unit tests
+python3 -m unittest discover -s tests -v         # 30 unit tests
 ```
 
 ## What it is (and is not)
@@ -48,28 +48,54 @@ quant-backtest-validator/
 └── reports/   (sample JSON reports produced by audit_demo.py)
 ```
 
-## Verdict model
+## Verdict model — three-dimensional, never one fake number
 
-Overall and per-section: **PASS / CONDITIONAL PASS / FAIL / NOT VERIFIED**, with a
-severity-ordered **P0–P4 issue log** and a reliability score (100 − Σ severity weights).
-P0 = result-distorting · P1 = needs manual confirmation · P2/P3 = conventions/hygiene ·
-P4 = polish. `NOT VERIFIED` sections never subtract score — they are listed as open items.
+Overall and per-section: **PASS / CONDITIONAL PASS / FAIL / DECLARED / NOT VERIFIED**, with a
+severity-ordered **P0–P4 issue log**. Results are reported on three axes so an audit can never
+look "clean" merely because large parts were not checked:
+
+```
+Overall Verdict : PASS (audit INCOMPLETE)
+Verified Score  : 96/100   (over the VERIFIED scope only)
+Audit Coverage  : 86%      (share of sections actually checked)
+Blocking        : P0=0 P1=0 P2=0
+NOT VERIFIED    : MTF
+```
+
+* `verified_score` = 100 − penalties on what was actually checked.
+* `coverage_pct` = share of sections not `NOT VERIFIED`. **Unchecked ≠ clean.**
+* `blocking` = P0/P1/P2 counts; P0 ⇒ FAIL, P1 ⇒ CONDITIONAL PASS on the verified scope.
+* `audit_complete` = False whenever any section is `NOT VERIFIED`; the recommendation then
+  says *"audit INCOMPLETE — do not treat as full validation"*.
+* Costs: no config ⇒ `NOT VERIFIED` · config supplied ⇒ `DECLARED` (assumptions recorded,
+  independent verification NOT PERFORMED) · `independently_verified: true` ⇒ `VERIFIED`.
 
 ## Sample report (reproduced by `examples/audit_demo.py`, deterministic)
 
 ```
 QUANT BACKTEST VALIDATION REPORT
-Strategy : EMA-trend (next-open, hold 5)        Engine : 2.0.0
-Overall Verdict : PASS                          Reliability : 96/100
+Strategy : EMA-trend (next-open, hold 5)        Engine : 2.1.0
+Overall Verdict : PASS   (audit INCOMPLETE)
+Verified Score  : 96/100 (over VERIFIED scope only)
+Audit Coverage  : 86%
+Blocking        : P0=0  P1=0  P2=0
 Data Integrity  PASS     Look-ahead PASS     Execution PASS
-Statistics      PASS     Robustness PASS     Costs    PASS
+Statistics      PASS     Robustness PASS     Costs    DECLARED
 MTF             NOT VERIFIED
-Findings: [P4] MTF roadmap · [P3] expansion confirmed · [P3] costs declared, not re-run
-Recommendation: no blocking findings; treat NOT VERIFIED (MTF) as open.
+Findings: [P3] expansion confirmed · [P3] costs declared, not verified (severity-ordered)
+Recommendation: no blocking findings in the VERIFIED scope; audit INCOMPLETE (MTF).
 ```
 
-A leaky strategy (same-bar fills, declared `same_bar`) audits to **FAIL · 13/100** with P0
-`ENTRY_SEMANTICS` + `EXECUTION_FILL` and **DO NOT DEPLOY** recommendation.
+A leaky strategy (same-bar fills, declared `same_bar`) audits to **FAIL · verified 13/100** with
+P0 `ENTRY_SEMANTICS` + `EXECUTION_FILL` listed **first** (P0→P4 order) and **DO NOT DEPLOY**.
+
+## OOS with warm-up context
+
+Chronological OOS runs the strategy over the **full history** and filters entries to the OOS
+window via the reserved `_from_bar` param (`Strategy.supports_from_bar=True`) — indicators warm
+up on real prior data with no cold start and no look-ahead. Strategies without this opt-in are
+flagged: *"OOS ran on a cold slice — indicator strategies may suffer cold-start"*. IS vs OOS
+comparison is normalized (PnL/trade, trade counts reported).
 
 ## Two tiers, stated honestly
 

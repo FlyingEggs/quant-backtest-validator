@@ -36,15 +36,18 @@ class TestAuditOverall(unittest.TestCase):
                                  entry_semantics="next_open")
         rep = audit(strat, df, SPEC,
                     {"expansion_confirmation": "completed",
-                     "cost": {"fee_bps": 4, "slippage_bps": 1}, "seed": 11})
+                     "cost": {"fee_bps": 4.0, "slippage_bps": 2.0},
+                     "seed": 11})
         self.assertEqual(rep["overall"], "PASS")
-        # two P3 hygiene items (expansion-confirmed note, declared-but-unverified costs)
-        # each cost 2 pts off a perfect 100; no P0/P1
-        self.assertGreaterEqual(rep["reliability_score"], 90)
-        self.assertLess(rep["reliability_score"], 100)
-        # Costs supplied -> verified; MTF is on the roadmap -> reported NOT VERIFIED
-        self.assertNotIn("Costs", rep["not_verified"])
+        self.assertGreaterEqual(rep["verified_score"], 90)
+        self.assertLess(rep["verified_score"], 100)       # two P3 hygiene items
+        self.assertEqual(rep["reliability_score"], rep["verified_score"])
+        # costs are DECLARED (not independently verified), MTF is NOT VERIFIED
+        self.assertEqual(rep["sections"]["Costs"]["status"], "DECLARED")
         self.assertIn("MTF", rep["not_verified"])
+        self.assertNotIn("Costs", rep["not_verified"])
+        self.assertLess(rep["coverage_pct"], 100)          # MTF uncovered
+        self.assertFalse(rep["audit_complete"])
         self.assertIn("reliability_score", rep)
         self.assertIn("recommendation", rep)
 
@@ -64,7 +67,8 @@ class TestAuditOverall(unittest.TestCase):
         codes = {i["code"] for i in rep["issues"]}
         self.assertIn("ENTRY_SEMANTICS", codes)
         self.assertIn("EXECUTION_FILL", codes)
-        self.assertLess(rep["reliability_score"], 100)
+        self.assertEqual(rep["issues"][0]["severity"], "P0")   # severity-ordered: P0 first
+        self.assertLess(rep["verified_score"], 100)
         self.assertIn("DO NOT DEPLOY", audit_text(strat, df, SPEC,
                                                   {"expansion_confirmation": "completed"}))
 
@@ -87,8 +91,66 @@ class TestAuditOverall(unittest.TestCase):
         rep = audit(strat, df, SPEC, {"seed": 11})
         self.assertEqual(rep["overall"], "PASS")            # no fabricated P0
         self.assertIn("Look-ahead", rep["not_verified"])    # needs signal column
+        self.assertIn("Statistics", rep["not_verified"])    # no per-trade rets
+        self.assertLess(rep["coverage_pct"], 100)
+        self.assertFalse(rep["audit_complete"])
         notes = "\n".join(rep["sections"]["Robustness"]["notes"])
         self.assertIn("NOT VERIFIED", notes)                 # RC needs signal column
+
+    def test_no_fake_clean_bill_for_unverified_scope(self):
+        """ADVERSARIAL: a black box with no rets/signal/cost must NOT look clean.
+        verified_score can be 100 over what WAS checked, but coverage < 100%,
+        audit INCOMPLETE, and the recommendation says so."""
+        df = D.regime_trend_df()
+
+        def run(frame, params):
+            return {"pnl": 0.0, "trades": 0}                # nothing assessable
+
+        strat = Strategy(name="blackbox-empty", run=run, entry_semantics="next_open")
+        rep = audit(strat, df, SPEC, {"seed": 1})
+        self.assertEqual(rep["verified_score"], 100)         # nothing found...
+        self.assertLess(rep["coverage_pct"], 100)            # ...but almost nothing checked
+        self.assertFalse(rep["audit_complete"])
+        self.assertGreaterEqual(len(rep["not_verified"]), 3)
+        self.assertIn("INCOMPLETE", audit_text(strat, df, SPEC, {"seed": 1}))
+
+    def test_costs_three_states(self):
+        from validator.costs import costs_check
+        self.assertEqual(costs_check({})["status"], "NOT VERIFIED")
+        declared = costs_check({"cost": {"fee_bps": 5, "slippage_bps": 2}})
+        self.assertEqual(declared["status"], "DECLARED")
+        verified = costs_check({"cost": {"fee_bps": 5, "slippage_bps": 2,
+                                         "independently_verified": True}})
+        self.assertEqual(verified["status"], "VERIFIED")
+        bad = costs_check({"cost": {"fee_bps": -1, "slippage_bps": 0}})
+        self.assertEqual(bad["status"], "FAIL")
+
+    def test_oos_warmup_contract(self):
+        """supports_from_bar=True -> OOS uses warm-up context; otherwise cold slice
+        is flagged."""
+        df = D.regime_trend_df()
+        from validator.robustness import check as rcheck
+
+        def run(frame, params):
+            sig = frame["sig"].fillna(0).to_numpy()
+            o = frame["open"].to_numpy()
+            n = len(frame)
+            from_bar = int(params.get("_from_bar", 0))
+            pnl = trades = 0.0
+            for i in range(n):
+                if sig[i] > 0 and i >= from_bar and i + 5 < n:
+                    pnl += o[i + 5] - o[i + 1]
+                    trades += 1
+            return {"pnl": pnl, "trades": int(trades)}
+
+        warm = Strategy(name="w", run=run, entry_semantics="next_open",
+                        supports_from_bar=True)
+        cold = Strategy(name="c", run=run, entry_semantics="next_open",
+                        supports_from_bar=False)
+        nw = "\n".join(rcheck(warm, df, SPEC, {"oos_frac": 0.3, "seed": 1})["notes"])
+        nc = "\n".join(rcheck(cold, df, SPEC, {"oos_frac": 0.3, "seed": 1})["notes"])
+        self.assertIn("warm-up context", nw)
+        self.assertIn("cold slice", nc)
 
 
 class TestOOSAndParam(unittest.TestCase):

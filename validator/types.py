@@ -23,6 +23,9 @@ class Strategy:
     param_grid: Optional[Dict[str, list]] = None  # {"lookback": [3,5,8,13]}
     entry_semantics: str = "next_open"
     description: str = ""
+    # if True, run() honours the reserved params '_from_bar' (and optional '_to_bar'):
+    # entries before '_from_bar' are ignored -> enables warm-up-context OOS runs
+    supports_from_bar: bool = False
     # ---- optional: expose the signal for the full mechanism suite -------------
     # signal_col: name of the signal column the strategy consumes from df
     # bt_mechanism: pure bt(df) over a frame that carries signal_col (v1-style)
@@ -39,7 +42,7 @@ class DataSpec:
 
 def as_strategy(name: str, run_df: Callable[[pd.DataFrame], Dict],
                 entry_semantics: str = "next_open",
-                description: str = "") -> Strategy:
+                description: str = "", supports_from_bar: bool = False) -> Strategy:
     """Adapt a plain run(df)->metrics function into a black-box Strategy.
 
     Parameter sensitivity is only meaningful when run(df, params) and a param_grid
@@ -48,7 +51,7 @@ def as_strategy(name: str, run_df: Callable[[pd.DataFrame], Dict],
     def _run(df: pd.DataFrame, params: dict) -> Dict:
         return run_df(df)
     return Strategy(name=name, run=_run, entry_semantics=entry_semantics,
-                    description=description)
+                    description=description, supports_from_bar=supports_from_bar)
 
 
 def as_code_strategy(name: str, df: pd.DataFrame, signal_col: str,

@@ -1,8 +1,20 @@
 {
-  "engine_version": "2.0.0",
+  "engine_version": "2.1.0",
   "strategy": "same-bar confirmation fill",
   "overall": "FAIL",
+  "audit_complete": false,
+  "verified_score": 13,
   "reliability_score": 13,
+  "coverage_pct": 71,
+  "not_verified": [
+    "Costs",
+    "MTF"
+  ],
+  "blocking": {
+    "P0": 2,
+    "P1": 0,
+    "P2": 1
+  },
   "sections": {
     "Data Integrity": {
       "status": "PASS",
@@ -78,10 +90,11 @@
         {
           "code": "OOS_DECAY",
           "severity": "P2",
-          "finding": "OOS pnl materially below IS after trade-count scaling"
+          "finding": "OOS PnL/trade 573 < 50% of IS PnL/trade 12,133 (normalized by trade count)"
         }
       ],
       "notes": [
+        "OOS ran on a cold slice (df[split:]) - indicator strategies may suffer cold-start; set Strategy.supports_from_bar=True for warm-up-context OOS",
         "parameter sensitivity NOT VERIFIED (needs run(df, params) + param_grid)"
       ]
     },
@@ -114,30 +127,6 @@
   },
   "issues": [
     {
-      "code": "COST_MODEL",
-      "severity": "P4",
-      "finding": "no cost model supplied (fee/funding/slippage) - reported PnL is gross; treat as NOT VERIFIED",
-      "section": "Costs"
-    },
-    {
-      "code": "MTF_MODULE",
-      "severity": "P4",
-      "finding": "multi-timeframe alignment module is on the roadmap - MTF leakage not assessed",
-      "section": "MTF"
-    },
-    {
-      "code": "PERIOD_EXPANSION_CONFIRMED",
-      "severity": "P3",
-      "finding": "expansion SUSPECT resolved by explicit confirmation",
-      "section": "Look-ahead"
-    },
-    {
-      "code": "OOS_DECAY",
-      "severity": "P2",
-      "finding": "OOS pnl materially below IS after trade-count scaling",
-      "section": "Robustness"
-    },
-    {
       "code": "ENTRY_SEMANTICS",
       "severity": "P0",
       "finding": "entry semantics 'same_bar' - only next_open is self-certifying; anything else needs an execution model before it can be validated",
@@ -148,11 +137,31 @@
       "severity": "P0",
       "finding": "fill-timing pnl 17,319,566 -> 23 after +1 bar fill shift (retains 0.0%) - perturbation evidence; corroborate with an execution model before declaring look-ahead",
       "section": "Execution"
+    },
+    {
+      "code": "OOS_DECAY",
+      "severity": "P2",
+      "finding": "OOS PnL/trade 573 < 50% of IS PnL/trade 12,133 (normalized by trade count)",
+      "section": "Robustness"
+    },
+    {
+      "code": "PERIOD_EXPANSION_CONFIRMED",
+      "severity": "P3",
+      "finding": "expansion SUSPECT resolved by explicit confirmation",
+      "section": "Look-ahead"
+    },
+    {
+      "code": "COST_MODEL",
+      "severity": "P4",
+      "finding": "no cost model supplied (fee/funding/slippage) - reported PnL is gross; treat as NOT VERIFIED",
+      "section": "Costs"
+    },
+    {
+      "code": "MTF_MODULE",
+      "severity": "P4",
+      "finding": "multi-timeframe alignment module is on the roadmap - MTF leakage not assessed",
+      "section": "MTF"
     }
-  ],
-  "not_verified": [
-    "Costs",
-    "MTF"
   ],
   "recommendation": "DO NOT DEPLOY - close all P0 findings (execution look-ahead / unconfirmed expansion / entry semantics / broken data) and re-audit before relying on reported performance",
   "config_summary": {

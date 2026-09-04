@@ -24,7 +24,7 @@ from validator import data_integrity, execution, lookahead, statistics, robustne
 from validator import report as report_mod
 from validator.types import DataSpec, Strategy, default_config
 
-ENGINE_VERSION = "2.0.0"
+ENGINE_VERSION = "2.1.0"
 
 
 def audit(strategy: Strategy, df: pd.DataFrame,

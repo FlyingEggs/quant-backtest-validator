@@ -6,9 +6,12 @@ from typing import Dict
 
 
 def costs_check(config: Dict) -> Dict:
-    """A real cost model (fee schedule, funding history, slippage) is a separate
-    module. Until a cost config is supplied this section is NOT VERIFIED - never
-    silently assumed clean."""
+    """Three states - a declared fee schedule is NOT an independently verified one:
+      * config['cost'] is None            -> NOT VERIFIED
+      * config['cost'] supplied           -> DECLARED  (assumptions recorded)
+      * config['cost']['independently_verified'] -> VERIFIED (only after an independent
+        re-run against exchange schedules / funding history / liquidity)
+    """
     cost = config.get("cost")
     if cost is None:
         return {"status": "NOT VERIFIED",
@@ -23,11 +26,17 @@ def costs_check(config: Dict) -> Dict:
                 "issues": [{"code": "COST_NEGATIVE", "severity": "P0",
                             "finding": "cost config contains negative fee/slippage"}],
                 "notes": []}
-    return {"status": "PASS",
-            "issues": [{"code": "COST_MODEL", "severity": "P3",
+    if cost.get("independently_verified"):
+        return {"status": "VERIFIED",
+                "issues": [], "notes": [f"fee {fee} bps/side, slippage {slip} bps - "
+                                        "independently verified"]}
+    return {"status": "DECLARED",
+            "issues": [{"code": "COST_DECLARED", "severity": "P3",
                         "finding": f"cost assumptions declared: fee {fee} bps/side, "
-                                   f"slippage {slip} bps - not independently verified"}],
-            "notes": ["costs declared but not yet independently re-run; module roadmap"]}
+                                   f"slippage {slip} bps - independent verification NOT "
+                                   f"PERFORMED (venue schedule/funding/liquidity)"}],
+            "notes": ["declared, not verified - set cost.independently_verified only after "
+                      "an independent re-run"]}
 
 
 def mtf_check(config: Dict) -> Dict:
