@@ -1,0 +1,10 @@
+# Python
+__pycache__/
+*.pyc
+
+# OS
+.DS_Store
+
+# never commit secrets here either
+.env
+.env.*
