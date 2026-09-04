@@ -1,4 +1,17 @@
-"""Statistics section (V2) — return independence / N_eff (informational)."""
+"""Statistics section (V2.1) — return independence / N_eff, graded not silent.
+
+Rationale: autocorrelation does not make a strategy invalid - it makes its
+*significance* claims weaker. So dependence is never a P0/P1 blocker at the overall
+level, but a heavily dependent series can no longer get a silent PASS:
+
+  N_eff / n >= 0.8   -> PASS (clean)
+  0.5 .. 0.8         -> P3 note
+  0.2 .. 0.5         -> P3 note (section PASS, significance flagged)
+  < 0.2              -> P2 STAT_DEPENDENCE, section CONDITIONAL PASS
+
+The issue + section status make the discount visible; the overall verdict is not
+flipped by statistics alone (see module docstring).
+"""
 
 from __future__ import annotations
 
@@ -19,13 +32,28 @@ def check(strategy: Strategy, df, spec: DataSpec, config: Dict) -> Dict:
              "finding": "strategy returned no per-trade 'rets' - independence/N_eff "
                         "not assessable"}],
             "notes": ["return per-trade rets to enable N_eff"]}
+
     rep = core.return_independence(rets, verbose=False)
     issues, notes = [], []
-    if rep["verdict"] == "AUTOCORRELATED":
-        notes.append(f"N_eff={rep['n_eff']} < n={rep['n']} "
-                     f"(inflation x{rep['inflation_factor']}); overlapping trades "
-                     f"deflate significance")
+
+    if rep["verdict"] == "AUTOCORRELATED" and rep["n_eff"] is not None:
+        r = rep["n_eff"] / rep["n"]
+        notes.append(f"N_eff={rep['n_eff']} / n={rep['n']} (ratio {r:.2f}); overlapping "
+                     f"trades deflate significance")
+        if r < 0.2:
+            issues.append({"code": "STAT_DEPENDENCE", "severity": "P2",
+                           "finding": f"heavy return dependence: N_eff/n={r:.2f} - "
+                           f"{rep['n']} trades behave like ~{rep['n_eff']:.0f}; any "
+                           f"significance claim must be discounted"})
+            status = "CONDITIONAL PASS"
+        elif r < 0.8:
+            issues.append({"code": "STAT_DEPENDENCE", "severity": "P3",
+                           "finding": f"return dependence: N_eff/n={r:.2f} - significance "
+                           f"claims need discounting"})
+            status = "PASS"
+        else:
+            status = "PASS"
     else:
+        status = "PASS"
         notes.append(f"N_eff={rep['n_eff']} / n={rep['n']}")
-    return {"status": "PASS", "issues": issues,
-            "notes": notes, "evidence": rep}
+    return {"status": status, "issues": issues, "notes": notes, "evidence": rep}

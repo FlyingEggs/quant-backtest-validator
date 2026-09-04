@@ -145,7 +145,7 @@ def markov_short_df(n: int = 20000, q: float = 0.65, seed: int = 1) -> pd.DataFr
     for i in range(1, n):
         s[i] = s[i - 1] if rng.random() < q else -s[i - 1]
     rets = s + rng.normal(0.0, 0.5, n)
-    closes = np.cumsum(rets)
+    closes = 3000.0 * np.exp(0.0005 * np.cumsum(rets))   # geometric: prices stay > 0
     df = frame(closes)
     df["sig"] = np.sign(closes - df["open"].to_numpy())     # sign of the bar's move
     return df

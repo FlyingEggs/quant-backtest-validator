@@ -17,7 +17,7 @@ print(audit_text(strategy, df, ...))
 ```bash
 python3 examples/audit_demo.py                   # two full client-style reports -> ./reports/
 python3 examples/demo.py                         # six mechanistic archetypes (primitives)
-python3 -m unittest discover -s tests -v         # 30 unit tests
+python3 -m unittest discover -s tests -v         # 46 unit tests (incl. adversarial suite)
 ```
 
 ## What it is (and is not)
@@ -47,6 +47,35 @@ quant-backtest-validator/
 ├── tests/     (27 unit tests)
 └── reports/   (sample JSON reports produced by audit_demo.py)
 ```
+
+## Adversarial suite (the Validator is attacked, not just tested)
+
+`tests/test_adversarial.py` encodes an expected verdict per scenario — cheating
+strategies must never get a clean bill, legitimate ones must never be auto-FAILED:
+
+| Scenario | Expected | Result |
+|---|---|---|
+| 01 honest trend | PASS | ✓ |
+| 02 same-bar fill cheat | FAIL (P0 fill + entry) | ✓ |
+| 03 future-column signal | CONDITIONAL (P1 evidence; leak proof = code review) | ✓ not PASS |
+| 04 low-frequency reuse | FAIL unconfirmed | ✓ |
+| 06 costs none/understated | NOT VERIFIED / DECLARED (never auto-PASS) | ✓ |
+| 07 IS-fit / OOS-broken | CONDITIONAL (OOS_INSTABILITY) | ✓ |
+| 08 parameter cliff (1D) | PARAM_CLIFF detected | ✓ |
+| 09 heavily overlapping returns | Statistics CONDITIONAL + STAT_DEPENDENCE (never silent) | ✓ |
+| 10 short-horizon legitimate | CONDITIONAL (never auto-FAIL) | ✓ |
+| 11 overlapping-but-legit | overall PASS (dependence discounts, not kills) | ✓ |
+| 12 regime strategy | PASS | ✓ |
+
+Known capability gaps are `skip`ped with the reason stated (survivorship bias, 2D
+parameter island, MTF temporal engine, mechanical leak *proof*) — boundaries are
+documented, never faked as PASS.
+
+## Statistics grading (v2.1.1)
+
+Return dependence is never a silent PASS: `N_eff/n < 0.2` ⇒ section CONDITIONAL +
+`STAT_DEPENDENCE`; `0.2–0.8` ⇒ P3 note. By policy it discounts significance claims
+but does not flip the overall verdict (overlapping trades are not invalid trades).
 
 ## Verdict model — three-dimensional, never one fake number
 
