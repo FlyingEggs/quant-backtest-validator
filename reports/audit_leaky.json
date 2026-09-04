@@ -1,0 +1,164 @@
+{
+  "engine_version": "2.0.0",
+  "strategy": "same-bar confirmation fill",
+  "overall": "FAIL",
+  "reliability_score": 13,
+  "sections": {
+    "Data Integrity": {
+      "status": "PASS",
+      "issues": [],
+      "notes": [
+        "2000 bars checked"
+      ]
+    },
+    "Look-ahead": {
+      "status": "PASS",
+      "issues": [
+        {
+          "code": "PERIOD_EXPANSION_CONFIRMED",
+          "severity": "P3",
+          "finding": "expansion SUSPECT resolved by explicit confirmation"
+        }
+      ],
+      "notes": [
+        "lag=STABLE, expansion=SUSPECT"
+      ]
+    },
+    "Execution": {
+      "status": "FAIL",
+      "issues": [
+        {
+          "code": "ENTRY_SEMANTICS",
+          "severity": "P0",
+          "finding": "entry semantics 'same_bar' - only next_open is self-certifying; anything else needs an execution model before it can be validated"
+        },
+        {
+          "code": "EXECUTION_FILL",
+          "severity": "P0",
+          "finding": "fill-timing pnl 17,319,566 -> 23 after +1 bar fill shift (retains 0.0%) - perturbation evidence; corroborate with an execution model before declaring look-ahead"
+        }
+      ],
+      "notes": [
+        "entry semantics not next_open",
+        "fill perturbation=FAIL, price_cols=['open']"
+      ]
+    },
+    "Statistics": {
+      "status": "PASS",
+      "issues": [],
+      "notes": [
+        "N_eff=95.7 < n=1999 (inflation x20.89); overlapping trades deflate significance"
+      ],
+      "evidence": {
+        "verdict": "AUTOCORRELATED",
+        "n": 1999,
+        "n_eff": 95.7,
+        "inflation_factor": 20.89,
+        "lb_q": 19954.944972486242,
+        "lb_p": 0.0,
+        "significant_lags": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10
+        ],
+        "acf_lag1": 0.999,
+        "interpretation": "1999 overlapping trades behave like ~96 independent samples for the mean return"
+      }
+    },
+    "Robustness": {
+      "status": "PASS",
+      "issues": [
+        {
+          "code": "OOS_DECAY",
+          "severity": "P2",
+          "finding": "OOS pnl materially below IS after trade-count scaling"
+        }
+      ],
+      "notes": [
+        "parameter sensitivity NOT VERIFIED (needs run(df, params) + param_grid)"
+      ]
+    },
+    "Costs": {
+      "status": "NOT VERIFIED",
+      "issues": [
+        {
+          "code": "COST_MODEL",
+          "severity": "P4",
+          "finding": "no cost model supplied (fee/funding/slippage) - reported PnL is gross; treat as NOT VERIFIED"
+        }
+      ],
+      "notes": [
+        "supply config['cost'] with fee/slippage/funding to verify"
+      ]
+    },
+    "MTF": {
+      "status": "NOT VERIFIED",
+      "issues": [
+        {
+          "code": "MTF_MODULE",
+          "severity": "P4",
+          "finding": "multi-timeframe alignment module is on the roadmap - MTF leakage not assessed"
+        }
+      ],
+      "notes": [
+        "provide aligned MTF frames for the V3 module"
+      ]
+    }
+  },
+  "issues": [
+    {
+      "code": "COST_MODEL",
+      "severity": "P4",
+      "finding": "no cost model supplied (fee/funding/slippage) - reported PnL is gross; treat as NOT VERIFIED",
+      "section": "Costs"
+    },
+    {
+      "code": "MTF_MODULE",
+      "severity": "P4",
+      "finding": "multi-timeframe alignment module is on the roadmap - MTF leakage not assessed",
+      "section": "MTF"
+    },
+    {
+      "code": "PERIOD_EXPANSION_CONFIRMED",
+      "severity": "P3",
+      "finding": "expansion SUSPECT resolved by explicit confirmation",
+      "section": "Look-ahead"
+    },
+    {
+      "code": "OOS_DECAY",
+      "severity": "P2",
+      "finding": "OOS pnl materially below IS after trade-count scaling",
+      "section": "Robustness"
+    },
+    {
+      "code": "ENTRY_SEMANTICS",
+      "severity": "P0",
+      "finding": "entry semantics 'same_bar' - only next_open is self-certifying; anything else needs an execution model before it can be validated",
+      "section": "Execution"
+    },
+    {
+      "code": "EXECUTION_FILL",
+      "severity": "P0",
+      "finding": "fill-timing pnl 17,319,566 -> 23 after +1 bar fill shift (retains 0.0%) - perturbation evidence; corroborate with an execution model before declaring look-ahead",
+      "section": "Execution"
+    }
+  ],
+  "not_verified": [
+    "Costs",
+    "MTF"
+  ],
+  "recommendation": "DO NOT DEPLOY - close all P0 findings (execution look-ahead / unconfirmed expansion / entry semantics / broken data) and re-audit before relying on reported performance",
+  "config_summary": {
+    "seed": 7,
+    "n_shuffles": 200,
+    "expansion_confirmation": "completed",
+    "oos_frac": 0.3
+  }
+}

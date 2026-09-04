@@ -1,0 +1,123 @@
+{
+  "engine_version": "2.0.0",
+  "strategy": "EMA-trend (next-open, hold 5)",
+  "overall": "PASS",
+  "reliability_score": 96,
+  "sections": {
+    "Data Integrity": {
+      "status": "PASS",
+      "issues": [],
+      "notes": [
+        "3000 bars checked"
+      ]
+    },
+    "Look-ahead": {
+      "status": "PASS",
+      "issues": [
+        {
+          "code": "PERIOD_EXPANSION_CONFIRMED",
+          "severity": "P3",
+          "finding": "expansion SUSPECT resolved by explicit confirmation"
+        }
+      ],
+      "notes": [
+        "lag=STABLE, expansion=SUSPECT"
+      ]
+    },
+    "Execution": {
+      "status": "PASS",
+      "issues": [],
+      "notes": [
+        "fill perturbation=PASS, price_cols=['open']"
+      ]
+    },
+    "Statistics": {
+      "status": "PASS",
+      "issues": [],
+      "notes": [
+        "N_eff=54.4 < n=297 (inflation x5.455); overlapping trades deflate significance"
+      ],
+      "evidence": {
+        "verdict": "AUTOCORRELATED",
+        "n": 297,
+        "n_eff": 54.4,
+        "inflation_factor": 5.455,
+        "lb_q": 409.372132763044,
+        "lb_p": 9.520090702271232e-82,
+        "significant_lags": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "acf_lag1": 0.776,
+        "interpretation": "297 overlapping trades behave like ~54 independent samples for the mean return"
+      }
+    },
+    "Robustness": {
+      "status": "PASS",
+      "issues": [],
+      "notes": [
+        "OOS consistent: IS 32,614 / OOS 16,106 (69 trades)",
+        "parameter sensitivity NOT VERIFIED (needs run(df, params) + param_grid)"
+      ]
+    },
+    "Costs": {
+      "status": "PASS",
+      "issues": [
+        {
+          "code": "COST_MODEL",
+          "severity": "P3",
+          "finding": "cost assumptions declared: fee 4.0 bps/side, slippage 2.0 bps - not independently verified"
+        }
+      ],
+      "notes": [
+        "costs declared but not yet independently re-run; module roadmap"
+      ]
+    },
+    "MTF": {
+      "status": "NOT VERIFIED",
+      "issues": [
+        {
+          "code": "MTF_MODULE",
+          "severity": "P4",
+          "finding": "multi-timeframe alignment module is on the roadmap - MTF leakage not assessed"
+        }
+      ],
+      "notes": [
+        "provide aligned MTF frames for the V3 module"
+      ]
+    }
+  },
+  "issues": [
+    {
+      "code": "MTF_MODULE",
+      "severity": "P4",
+      "finding": "multi-timeframe alignment module is on the roadmap - MTF leakage not assessed",
+      "section": "MTF"
+    },
+    {
+      "code": "PERIOD_EXPANSION_CONFIRMED",
+      "severity": "P3",
+      "finding": "expansion SUSPECT resolved by explicit confirmation",
+      "section": "Look-ahead"
+    },
+    {
+      "code": "COST_MODEL",
+      "severity": "P3",
+      "finding": "cost assumptions declared: fee 4.0 bps/side, slippage 2.0 bps - not independently verified",
+      "section": "Costs"
+    }
+  ],
+  "not_verified": [
+    "MTF"
+  ],
+  "recommendation": "No blocking findings in the implemented checks. Treat NOT VERIFIED sections as open before deployment decisions.",
+  "config_summary": {
+    "seed": 11,
+    "n_shuffles": 200,
+    "expansion_confirmation": "completed",
+    "oos_frac": 0.3
+  }
+}

@@ -47,14 +47,16 @@ def next_open_hold(hold: int):
     return run
 
 
-def frame(closes: np.ndarray) -> pd.DataFrame:
+def frame(closes: np.ndarray, bar_seconds: int = 300) -> pd.DataFrame:
     n = len(closes)
     open_ = np.empty(n)
     open_[0] = closes[0]
     open_[1:] = closes[:-1]                      # no overnight gaps (5-min bars)
     high = np.maximum(open_, closes) * 1.0005
     low = np.minimum(open_, closes) * 0.9995
-    return pd.DataFrame({"open": open_, "high": high, "low": low, "close": closes})
+    idx = pd.date_range("2026-01-01", periods=n, freq=f"{bar_seconds}s")
+    return pd.DataFrame({"open": open_, "high": high, "low": low, "close": closes},
+                        index=idx)
 
 
 # ---------------------------------------------------------------------------
@@ -75,7 +77,10 @@ def same_bar_leak_df(n: int = 2000) -> pd.DataFrame:
         close[i] = open_[i] * (1 + 0.008 * sig[i])
         if i + 1 < n:
             open_[i + 1] = close[i]
-    df = pd.DataFrame({"open": open_, "close": close})
+    df = pd.DataFrame({"open": open_, "close": close,
+                       "high": np.maximum(open_, close),
+                       "low": np.minimum(open_, close)},
+                      index=pd.date_range("2026-01-01", periods=n, freq="300s"))
     df["sig"] = sig
     return df
 
