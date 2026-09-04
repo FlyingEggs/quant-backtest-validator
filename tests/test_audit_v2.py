@@ -38,18 +38,34 @@ class TestAuditOverall(unittest.TestCase):
                     {"expansion_confirmation": "completed",
                      "cost": {"fee_bps": 4.0, "slippage_bps": 2.0},
                      "seed": 11})
-        self.assertEqual(rep["overall"], "PASS")
+        # 4-state contract: MTF is on the roadmap -> NOT VERIFIED -> INCOMPLETE,
+        # even though every implemented section is clean.
+        self.assertEqual(rep["overall"], "INCOMPLETE")
+        self.assertEqual(rep["blocking"]["P0"], 0)      # P2 may come from STAT_DEPENDENCE
+        self.assertEqual(rep["blocking"]["P1"], 0)      # (honest overlapping rets)
         self.assertGreaterEqual(rep["verified_score"], 90)
         self.assertLess(rep["verified_score"], 100)       # two P3 hygiene items
         self.assertEqual(rep["reliability_score"], rep["verified_score"])
-        # costs are DECLARED (not independently verified), MTF is NOT VERIFIED
         self.assertEqual(rep["sections"]["Costs"]["status"], "DECLARED")
         self.assertIn("MTF", rep["not_verified"])
         self.assertNotIn("Costs", rep["not_verified"])
-        self.assertLess(rep["coverage_pct"], 100)          # MTF uncovered
         self.assertFalse(rep["audit_complete"])
-        self.assertIn("reliability_score", rep)
         self.assertIn("recommendation", rep)
+
+    def test_pass_only_when_scope_complete(self):
+        """PASS is reserved for a fully verified declared scope (V2.2 contract)."""
+        df = D.regime_trend_df()
+        strat = as_code_strategy("honest", df, "sig", D.next_open_hold(5),
+                                 entry_semantics="next_open")
+        cfg = {"expansion_confirmation": "completed",
+               "cost": {"fee_bps": 4.0, "slippage_bps": 2.0}, "seed": 11,
+               "scope": ["Data Integrity", "Look-ahead", "Execution",
+                         "Statistics", "Robustness", "Costs"]}     # MTF out of scope
+        rep = audit(strat, df, SPEC, cfg)
+        self.assertEqual(rep["overall"], "PASS")
+        self.assertTrue(rep["audit_complete"])
+        self.assertNotIn("MTF", rep["not_verified"])
+        self.assertIn("scope", rep)
 
     def test_costs_unverified_when_not_supplied(self):
         df = D.regime_trend_df()
@@ -89,7 +105,7 @@ class TestAuditOverall(unittest.TestCase):
 
         strat = Strategy(name="blackbox", run=run, entry_semantics="next_open")
         rep = audit(strat, df, SPEC, {"seed": 11})
-        self.assertEqual(rep["overall"], "PASS")            # no fabricated P0
+        self.assertEqual(rep["overall"], "INCOMPLETE")       # no fabricated FAIL/PASS
         self.assertIn("Look-ahead", rep["not_verified"])    # needs signal column
         self.assertIn("Statistics", rep["not_verified"])    # no per-trade rets
         self.assertLess(rep["coverage_pct"], 100)
@@ -183,8 +199,9 @@ class TestOOSAndParam(unittest.TestCase):
         rep = audit(strat, df, SPEC, {"seed": 1})
         codes = {i["code"] for i in rep["issues"]}
         self.assertIn("PARAM_CLIFF", codes)
-        # P2 does not change the verdict
-        self.assertEqual(rep["overall"], "PASS")
+        # no P0/P1 -> INCOMPLETE (MTF/Costs not verified), never silent PASS
+        self.assertEqual(rep["overall"], "INCOMPLETE")
+        self.assertEqual(rep["blocking"]["P0"], 0)
 
 
 class TestReportShape(unittest.TestCase):

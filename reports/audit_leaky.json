@@ -1,10 +1,19 @@
 {
-  "engine_version": "2.1.0",
+  "engine_version": "2.2.0",
   "strategy": "same-bar confirmation fill",
+  "scope": [
+    "Data Integrity",
+    "Look-ahead",
+    "Execution",
+    "Statistics",
+    "Robustness",
+    "Costs",
+    "MTF"
+  ],
   "overall": "FAIL",
   "audit_complete": false,
-  "verified_score": 13,
-  "reliability_score": 13,
+  "verified_score": 8,
+  "reliability_score": 8,
   "coverage_pct": 71,
   "not_verified": [
     "Costs",
@@ -13,7 +22,13 @@
   "blocking": {
     "P0": 2,
     "P1": 0,
-    "P2": 1
+    "P2": 2
+  },
+  "statistical_confidence": {
+    "significance_reliability": "DISCOUNTED",
+    "n_eff": 95.7,
+    "n": 1999,
+    "ratio": 0.05
   },
   "sections": {
     "Data Integrity": {
@@ -33,7 +48,8 @@
         }
       ],
       "notes": [
-        "lag=STABLE, expansion=SUSPECT"
+        "lag=STABLE, expansion=SUSPECT",
+        "code-level timestamp verification NOT PERFORMED - mechanical evidence only; a future-function PROOF requires the data/indicator/signal/order/fill availability timeline (code review)"
       ]
     },
     "Execution": {
@@ -56,10 +72,16 @@
       ]
     },
     "Statistics": {
-      "status": "PASS",
-      "issues": [],
+      "status": "CONDITIONAL PASS",
+      "issues": [
+        {
+          "code": "STAT_DEPENDENCE",
+          "severity": "P2",
+          "finding": "heavy return dependence: N_eff/n=0.05 - 1999 trades behave like ~96; any significance claim must be discounted"
+        }
+      ],
       "notes": [
-        "N_eff=95.7 < n=1999 (inflation x20.89); overlapping trades deflate significance"
+        "N_eff=95.7 / n=1999 (ratio 0.05); overlapping trades deflate significance"
       ],
       "evidence": {
         "verdict": "AUTOCORRELATED",
@@ -137,6 +159,12 @@
       "severity": "P0",
       "finding": "fill-timing pnl 17,319,566 -> 23 after +1 bar fill shift (retains 0.0%) - perturbation evidence; corroborate with an execution model before declaring look-ahead",
       "section": "Execution"
+    },
+    {
+      "code": "STAT_DEPENDENCE",
+      "severity": "P2",
+      "finding": "heavy return dependence: N_eff/n=0.05 - 1999 trades behave like ~96; any significance claim must be discounted",
+      "section": "Statistics"
     },
     {
       "code": "OOS_DECAY",

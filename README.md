@@ -55,17 +55,17 @@ strategies must never get a clean bill, legitimate ones must never be auto-FAILE
 
 | Scenario | Expected | Result |
 |---|---|---|
-| 01 honest trend | PASS | ✓ |
+| 01 honest trend | PASS (scoped) / INCOMPLETE (full scope: MTF roadmap) | ✓ |
 | 02 same-bar fill cheat | FAIL (P0 fill + entry) | ✓ |
 | 03 future-column signal | CONDITIONAL (P1 evidence; leak proof = code review) | ✓ not PASS |
 | 04 low-frequency reuse | FAIL unconfirmed | ✓ |
 | 06 costs none/understated | NOT VERIFIED / DECLARED (never auto-PASS) | ✓ |
 | 07 IS-fit / OOS-broken | CONDITIONAL (OOS_INSTABILITY) | ✓ |
-| 08 parameter cliff (1D) | PARAM_CLIFF detected | ✓ |
-| 09 heavily overlapping returns | Statistics CONDITIONAL + STAT_DEPENDENCE (never silent) | ✓ |
+| 08 parameter cliff (1D) | PARAM_CLIFF detected (overall INCOMPLETE, no P0/P1) | ✓ |
+| 09 heavily overlapping returns | Statistics CONDITIONAL + STAT_DEPENDENCE; overall PASS within complete scope | ✓ |
 | 10 short-horizon legitimate | CONDITIONAL (never auto-FAIL) | ✓ |
-| 11 overlapping-but-legit | overall PASS (dependence discounts, not kills) | ✓ |
-| 12 regime strategy | PASS | ✓ |
+| 11 overlapping-but-legit | PASS (scoped); dependence discounts, never kills | ✓ |
+| 12 regime strategy | PASS (scoped) | ✓ |
 
 Known capability gaps are `skip`ped with the reason stated (survivorship bias, 2D
 parameter island, MTF temporal engine, mechanical leak *proof*) — boundaries are
@@ -77,46 +77,47 @@ Return dependence is never a silent PASS: `N_eff/n < 0.2` ⇒ section CONDITIONA
 `STAT_DEPENDENCE`; `0.2–0.8` ⇒ P3 note. By policy it discounts significance claims
 but does not flip the overall verdict (overlapping trades are not invalid trades).
 
-## Verdict model — three-dimensional, never one fake number
+## Verdict model — 4-state Audit Verdict Contract (V2.2)
 
-Overall and per-section: **PASS / CONDITIONAL PASS / FAIL / DECLARED / NOT VERIFIED**, with a
-severity-ordered **P0–P4 issue log**. Results are reported on three axes so an audit can never
-look "clean" merely because large parts were not checked:
+Per-section statuses: **PASS / CONDITIONAL PASS / FAIL / DECLARED / NOT VERIFIED**. The
+**overall** verdict is 4-state over the declared audit scope:
 
 ```
-Overall Verdict : PASS (audit INCOMPLETE)
-Verified Score  : 96/100   (over the VERIFIED scope only)
-Audit Coverage  : 86%      (share of sections actually checked)
-Blocking        : P0=0 P1=0 P2=0
-NOT VERIFIED    : MTF
+P0 present                -> FAIL
+no P0, P1 present         -> CONDITIONAL PASS
+no P0/P1, some NOT VERIFIED -> INCOMPLETE
+no P0/P1, fully verified  -> PASS     (only "everything I checked is clean")
 ```
 
-* `verified_score` = 100 − penalties on what was actually checked.
-* `coverage_pct` = share of sections not `NOT VERIFIED`. **Unchecked ≠ clean.**
-* `blocking` = P0/P1/P2 counts; P0 ⇒ FAIL, P1 ⇒ CONDITIONAL PASS on the verified scope.
-* `audit_complete` = False whenever any section is `NOT VERIFIED`; the recommendation then
-  says *"audit INCOMPLETE — do not treat as full validation"*.
-* Costs: no config ⇒ `NOT VERIFIED` · config supplied ⇒ `DECLARED` (assumptions recorded,
-  independent verification NOT PERFORMED) · `independently_verified: true` ⇒ `VERIFIED`.
+`PASS` therefore means *"I checked the declared scope and it is clean"* — never *"nothing is
+wrong anywhere"*. Un-checked capability is `INCOMPLETE`, reported separately from blocking
+findings. `config['scope']` narrows the declared scope (a scoped audit must state its scope;
+PASS is only meaningful within it).
+
+Statistical confidence is reported separately so a PASS can never mask weak significance:
+`Significance: DISCOUNTED (N_eff 54/297, ratio 0.18) — verdict ≠ significance verdict`.
+Costs: no config ⇒ `NOT VERIFIED` · config ⇒ `DECLARED` · `independently_verified: true` ⇒
+`VERIFIED`.
 
 ## Sample report (reproduced by `examples/audit_demo.py`, deterministic)
 
 ```
 QUANT BACKTEST VALIDATION REPORT
-Strategy : EMA-trend (next-open, hold 5)        Engine : 2.1.0
-Overall Verdict : PASS   (audit INCOMPLETE)
-Verified Score  : 96/100 (over VERIFIED scope only)
+Strategy : EMA-trend (next-open, hold 5)        Engine : 2.2.0
+Overall Verdict : INCOMPLETE        (MTF on the roadmap - not a clean bill)
+Verified Score  : 91/100 (over VERIFIED scope only)
 Audit Coverage  : 86%
-Blocking        : P0=0  P1=0  P2=0
-Data Integrity  PASS     Look-ahead PASS     Execution PASS
-Statistics      PASS     Robustness PASS     Costs    DECLARED
-MTF             NOT VERIFIED
-Findings: [P3] expansion confirmed · [P3] costs declared, not verified (severity-ordered)
-Recommendation: no blocking findings in the VERIFIED scope; audit INCOMPLETE (MTF).
+Blocking        : P0=0  P1=0  P2=1
+Significance    : DISCOUNTED (N_eff 54.4/297, ratio 0.18)
+AUDIT SCOPE     ✓ Data Integrity · ✓ Look-ahead · ✓ Execution ·
+                ✓ Statistics (CONDITIONAL) · ✓ Robustness · ✓ Costs (DECLARED) · △ MTF
+Findings: [P2] STAT_DEPENDENCE · [P3] expansion confirmed · [P3] costs declared
+Recommendation: no blocking in VERIFIED scope, but INCOMPLETE - complete scope for PASS.
 ```
 
-A leaky strategy (same-bar fills, declared `same_bar`) audits to **FAIL · verified 13/100** with
-P0 `ENTRY_SEMANTICS` + `EXECUTION_FILL` listed **first** (P0→P4 order) and **DO NOT DEPLOY**.
+With MTF declared out of scope (and costs supplied), the same strategy audits to genuine
+**PASS**. A leaky strategy (same-bar fills, declared `same_bar`) audits to **FAIL · 13/100**
+with P0 `ENTRY_SEMANTICS` + `EXECUTION_FILL` listed first and **DO NOT DEPLOY**.
 
 ## OOS with warm-up context
 

@@ -1,10 +1,19 @@
 {
-  "engine_version": "2.1.0",
+  "engine_version": "2.2.0",
   "strategy": "EMA-trend (next-open, hold 5)",
-  "overall": "PASS",
+  "scope": [
+    "Data Integrity",
+    "Look-ahead",
+    "Execution",
+    "Statistics",
+    "Robustness",
+    "Costs",
+    "MTF"
+  ],
+  "overall": "INCOMPLETE",
   "audit_complete": false,
-  "verified_score": 96,
-  "reliability_score": 96,
+  "verified_score": 91,
+  "reliability_score": 91,
   "coverage_pct": 86,
   "not_verified": [
     "MTF"
@@ -12,7 +21,13 @@
   "blocking": {
     "P0": 0,
     "P1": 0,
-    "P2": 0
+    "P2": 1
+  },
+  "statistical_confidence": {
+    "significance_reliability": "DISCOUNTED",
+    "n_eff": 54.4,
+    "n": 297,
+    "ratio": 0.18
   },
   "sections": {
     "Data Integrity": {
@@ -32,7 +47,8 @@
         }
       ],
       "notes": [
-        "lag=STABLE, expansion=SUSPECT"
+        "lag=STABLE, expansion=SUSPECT",
+        "code-level timestamp verification NOT PERFORMED - mechanical evidence only; a future-function PROOF requires the data/indicator/signal/order/fill availability timeline (code review)"
       ]
     },
     "Execution": {
@@ -43,10 +59,16 @@
       ]
     },
     "Statistics": {
-      "status": "PASS",
-      "issues": [],
+      "status": "CONDITIONAL PASS",
+      "issues": [
+        {
+          "code": "STAT_DEPENDENCE",
+          "severity": "P2",
+          "finding": "heavy return dependence: N_eff/n=0.18 - 297 trades behave like ~54; any significance claim must be discounted"
+        }
+      ],
       "notes": [
-        "N_eff=54.4 < n=297 (inflation x5.455); overlapping trades deflate significance"
+        "N_eff=54.4 / n=297 (ratio 0.18); overlapping trades deflate significance"
       ],
       "evidence": {
         "verdict": "AUTOCORRELATED",
@@ -104,6 +126,12 @@
   },
   "issues": [
     {
+      "code": "STAT_DEPENDENCE",
+      "severity": "P2",
+      "finding": "heavy return dependence: N_eff/n=0.18 - 297 trades behave like ~54; any significance claim must be discounted",
+      "section": "Statistics"
+    },
+    {
       "code": "PERIOD_EXPANSION_CONFIRMED",
       "severity": "P3",
       "finding": "expansion SUSPECT resolved by explicit confirmation",
@@ -122,7 +150,7 @@
       "section": "MTF"
     }
   ],
-  "recommendation": "No blocking findings in the VERIFIED scope, but the audit is INCOMPLETE (coverage 86%; NOT VERIFIED: MTF). Do not treat as full validation until those sections are checked.",
+  "recommendation": "No blocking findings in the VERIFIED scope, but the audit is INCOMPLETE (coverage 86%; NOT VERIFIED: MTF). PASS is only granted when every scope item is verified - complete the scope before treating this as a clean bill.",
   "config_summary": {
     "seed": 11,
     "n_shuffles": 200,

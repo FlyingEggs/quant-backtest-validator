@@ -28,6 +28,16 @@ def pcode(rep, code):
     return [i for i in rep["issues"] if i["code"] == code]
 
 
+def scoped_clean_cfg(**over):
+    """Scope minus MTF (roadmap), costs declared: enables a genuine PASS test."""
+    cfg = {"expansion_confirmation": "completed",
+           "cost": {"fee_bps": 4.0, "slippage_bps": 2.0},
+           "scope": ["Data Integrity", "Look-ahead", "Execution",
+                     "Statistics", "Robustness", "Costs"]}
+    cfg.update(over)
+    return cfg
+
+
 class TestNoFalseClean(unittest.TestCase):
     """FN: cheating strategies must never get a clean PASS."""
 
@@ -104,17 +114,30 @@ class TestNoFalseClean(unittest.TestCase):
         self.assertTrue(pcode(rep, "PARAM_CLIFF"))
 
     def test_09_autocorrelated_returns_not_silent(self):
-        """Heavily overlapping returns: Statistics section must NOT be a silent PASS."""
+        """Heavily overlapping returns: Statistics section must NOT be a silent PASS.
+        Within a complete scope the verdict stays PASS - dependence discounts
+        significance, it does not flip the verdict."""
         rets = D.ar1_rets(n=400, rho=0.8)
 
         def run(frame, params):
             return {"pnl": float(np.sum(rets)), "trades": 400, "rets": rets}
         strat = Strategy(name="overlapper", run=run, entry_semantics="next_open")
-        rep = audit(strat, D.regime_trend_df(), SPEC, {"seed": 1})
+        df = D.regime_trend_df()
+        rep = audit(strat, df, SPEC, {"seed": 1})
         self.assertEqual(rep["sections"]["Statistics"]["status"], "CONDITIONAL PASS")
         self.assertTrue(pcode(rep, "STAT_DEPENDENCE"))
-        # by policy: dependence discounts significance, it does not flip the verdict
-        self.assertEqual(rep["overall"], "PASS")
+        self.assertEqual(rep["overall"], "INCOMPLETE")       # full default scope
+        # policy check: within a complete scope, dependence does not flip the verdict
+        no_mtf = {"expansion_confirmation": "completed",
+                  "cost": {"fee_bps": 4.0, "slippage_bps": 2.0},
+                  "scope": ["Data Integrity", "Execution", "Statistics",
+                            "Robustness", "Costs"],        # black box: Look-ahead excluded
+                  "seed": 1}
+        rep2 = audit(strat, df, SPEC, no_mtf)
+        self.assertEqual(rep2["overall"], "PASS")
+        self.assertEqual(rep2["sections"]["Statistics"]["status"], "CONDITIONAL PASS")
+        self.assertEqual(rep2["statistical_confidence"]["significance_reliability"],
+                         "DISCOUNTED")
 
 
 class TestNoFalseFail(unittest.TestCase):
@@ -124,8 +147,17 @@ class TestNoFalseFail(unittest.TestCase):
         df = D.regime_trend_df()
         strat = as_code_strategy("honest", df, "sig", D.next_open_hold(5),
                                  entry_semantics="next_open")
+        # full default scope: MTF roadmap -> INCOMPLETE, but zero blocking findings
         rep = audit(strat, df, SPEC, {"expansion_confirmation": "completed", "seed": 11})
-        self.assertEqual(rep["overall"], "PASS")
+        self.assertEqual(rep["overall"], "INCOMPLETE")
+        self.assertEqual(rep["blocking"]["P0"], 0)     # P2 = STAT_DEPENDENCE (expected)
+        self.assertEqual(rep["blocking"]["P1"], 0)
+        self.assertEqual(rep["sections"]["Look-ahead"]["status"], "PASS")
+        self.assertEqual(rep["sections"]["Execution"]["status"], "PASS")
+        # declared scope minus the roadmap module -> genuine PASS
+        rep2 = audit(strat, df, SPEC, scoped_clean_cfg(seed=11))
+        self.assertEqual(rep2["overall"], "PASS")
+        self.assertTrue(rep2["audit_complete"])
 
     def test_10_short_horizon_legitimate_is_conditional_not_fail(self):
         df = D.markov_short_df()
@@ -139,9 +171,10 @@ class TestNoFalseFail(unittest.TestCase):
         df = D.regime_trend_df()
         strat = as_code_strategy("overlap-hold5", df, "sig", D.next_open_hold(5),
                                  entry_semantics="next_open")
-        rep = audit(strat, df, SPEC, {"expansion_confirmation": "completed", "seed": 11})
-        self.assertEqual(rep["overall"], "PASS")
+        rep = audit(strat, df, SPEC, scoped_clean_cfg(seed=11))
+        self.assertEqual(rep["overall"], "PASS")                     # not failed
         self.assertEqual(rep["sections"]["Statistics"]["status"], "CONDITIONAL PASS")
+        self.assertEqual(rep["blocking"]["P0"], 0)
 
     def test_12_regime_strategy_no_false_fail(self):
         """A slow regime state machine (long in up-regime, flat/short in down) with
@@ -149,7 +182,7 @@ class TestNoFalseFail(unittest.TestCase):
         df = D.regime_trend_df()
         strat = as_code_strategy("regime-switch", df, "sig", D.next_open_hold(5),
                                  entry_semantics="next_open")
-        rep = audit(strat, df, SPEC, {"expansion_confirmation": "completed", "seed": 11})
+        rep = audit(strat, df, SPEC, scoped_clean_cfg(seed=11))
         self.assertEqual(rep["overall"], "PASS")
 
 

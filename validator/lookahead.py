@@ -48,6 +48,9 @@ def check(strategy: Strategy, df: pd.DataFrame, spec: DataSpec,
         issues.append({"code": "PERIOD_EXPANSION_CONFIRMED", "severity": "P3",
                        "finding": "expansion SUSPECT resolved by explicit confirmation"})
     notes.append(f"lag={lag['verdict']}, expansion={exp['verdict']}")
+    notes.append("code-level timestamp verification NOT PERFORMED - mechanical "
+                 "evidence only; a future-function PROOF requires the data/indicator/"
+                 "signal/order/fill availability timeline (code review)")
 
     status = "FAIL" if any(i["severity"] == "P0" for i in issues) else \
              ("CONDITIONAL PASS" if any(i["severity"] == "P1" for i in issues) else "PASS")
