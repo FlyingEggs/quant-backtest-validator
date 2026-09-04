@@ -38,6 +38,9 @@ class DataSpec:
     bar_seconds: int = 300
     source: str = "client-provided"
     description: str = ""
+    # V3: higher-timeframe frames for MTF temporal-availability checks.
+    # name -> DataFrame with a DatetimeIndex (bar OPEN) and the value column used.
+    timeframes: Dict[str, pd.DataFrame] = field(default_factory=dict)
 
 
 def as_strategy(name: str, run_df: Callable[[pd.DataFrame], Dict],

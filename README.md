@@ -17,7 +17,7 @@ print(audit_text(strategy, df, ...))
 ```bash
 python3 examples/audit_demo.py                   # two full client-style reports -> ./reports/
 python3 examples/demo.py                         # six mechanistic archetypes (primitives)
-python3 -m unittest discover -s tests -v         # 46 unit tests (incl. adversarial suite)
+python3 -m unittest discover -s tests -v         # 53 unit tests (adversarial + V3 MTF)
 ```
 
 ## What it is (and is not)
@@ -40,6 +40,7 @@ quant-backtest-validator/
 │   ├── statistics.py      # return independence / N_eff (needs per-trade rets)
 │   ├── robustness.py      # randomized control + chronological OOS + param cliffs
 │   ├── costs.py           # cost model gate (NOT VERIFIED until supplied)
+│   ├── mtf.py             # V3 temporal-availability engine (legal vs naive)
 │   ├── report.py          # verdict assembly, reliability score, text render
 │   ├── audit.py           # audit() / audit_text() entry points
 │   └── types.py           # Strategy / DataSpec contracts
@@ -149,14 +150,39 @@ comparison is normalized (PnL/trade, trade counts reported).
   Ljung-Box (squared rho, adaptive lag order) handles detection; chi2 is exact via scipy
   when available, Wilson–Hilferty otherwise.
 
+## V3 — MTF Temporal Availability Engine
+
+Not a "does the 4h data exist" checker. Given a signal column on a LOW frame and a HIGH
+frame (both in `DataSpec.timeframes`), the engine reconstructs, per decision time
+`t_dec` (= low-bar close), two counterfactuals:
+
+```
+legal(t) = value of the last HIGH bar whose close_time <= t_dec   (usable)
+naive(t) = value of the last HIGH bar whose open   <= t_dec       (may still be forming)
+```
+
+* column == `naive` on ≥90% of forming bars ⇒ **MTF_LEAK (P0)** — the signal used a
+  higher-TF bar that had not closed yet (e.g., today's 23:59 daily close at 09:00).
+* column == `legal` throughout ⇒ **PASS** — aligned with last-completed high bars
+  (e.g., yesterday's close used all day: legal).
+* partial/mixed matches (<90%) ⇒ **NOT VERIFIED** — chance-level alignment is not
+  declared a leak (FP guard).
+
+```python
+spec = DataSpec(bar_seconds=300, timeframes={"h1": high_1h_df})
+cfg = {"mtf": {"col": "sig", "frame": "h1",
+               "frame_seconds": 3600, "transform": "sign_diff"}}
+```
+
 ## Roadmap (open items, by design)
 
 | Module | Status |
 |---|---|
 | Execution model (intrabar stops/limits, slippage) | roadmap |
 | Real cost engine (funding history, fee schedules) | gate in place — `NOT VERIFIED` until supplied |
-| MTF alignment checks | roadmap — `NOT VERIFIED` |
-| Walk-forward / multi-window parameter robustness | robustness.py has single-split OOS + param cliffs; WF next |
+| MTF temporal availability (V3) | ✅ implemented — legal-vs-naive engine, needs binding + frames |
+| OOS trade-boundary policy + multi-window walk-forward | roadmap |
+| Parameter surface (2D island) / cluster dependence | roadmap |
 
 ## Honesty notes
 

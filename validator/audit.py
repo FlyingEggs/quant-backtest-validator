@@ -16,11 +16,11 @@ from typing import Dict, List, Optional
 import pandas as pd
 
 from validator import (data_integrity, execution, lookahead, statistics,
-                       robustness, costs)
+                       robustness, costs, mtf)
 from validator import report as report_mod
 from validator.types import DataSpec, Strategy, default_config
 
-ENGINE_VERSION = "2.2.0"
+ENGINE_VERSION = "3.0.0"
 
 ALL_SECTIONS = ["Data Integrity", "Look-ahead", "Execution", "Statistics",
                 "Robustness", "Costs", "MTF"]
@@ -35,7 +35,7 @@ def _build_sections(strategy, df, spec, cfg, scope: List[str]) -> Dict[str, Dict
         "Statistics": lambda: statistics.check(strategy, df, spec, cfg),
         "Robustness": lambda: robustness.check(strategy, df, spec, cfg),
         "Costs": lambda: costs.costs_check(cfg),
-        "MTF": lambda: costs.mtf_check(cfg),
+        "MTF": lambda: mtf.check(df, spec, cfg),
     }
     return {name: builders[name]() for name in ALL_SECTIONS if name in scope}
 

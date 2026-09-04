@@ -218,13 +218,8 @@ class TestKnownGaps(unittest.TestCase):
                       "not hidden).")
 
     def test_08_parameter_island_2d(self):
-        self.skipTest("2D parameter-surface island detection is V2.2 (PARAM_ISLAND); "
+        self.skipTest("2D parameter-surface island detection is V2.2+ (PARAM_ISLAND); "
                       "today only adjacent 1D cliffs (PARAM_CLIFF) are detected.")
-
-    def test_04_mtf_temporal_leak(self):
-        self.skipTest("true MTF temporal-availability engine is V3 (5m->1H->4h->Daily "
-                      "close/availability timestamps). The period-expansion gate catches "
-                      "low-frequency reuse but not all MTF leaks.")
 
     def test_03_future_signal_proof(self):
         self.skipTest("lag collapse is P1 evidence; *proving* the leak is a code-review "
