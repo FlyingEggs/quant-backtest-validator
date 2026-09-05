@@ -146,6 +146,17 @@ def audit_report_text(report: Dict) -> str:
     for name, sec in report["sections"].items():
         mark = "△" if sec["status"] in ("NOT VERIFIED", "DECLARED") else "✓"
         L.append(f"  {mark} {name:<16} {sec['status']}")
+    # V3.4 readability: surface / clustering rendered as their own lines
+    ev = (report["sections"].get("Robustness") or {}).get("evidence") or {}
+    if ev.get("surface"):
+        sa = ev["surface"]
+        L.append(f"Parameter Surface : {sa.get('verdict', 'n/a'):<8} best "
+                 f"{sa.get('best_pnl')} plateau {sa.get('plateau_frac')} "
+                 f"(isolated {sa.get('isolated_best')})")
+    if ev.get("cluster"):
+        ca = ev["cluster"]
+        L.append(f"Trade Clustering  : {ca.get('verdict', 'n/a'):<8} "
+                 f"{ca.get('raw_trades')} trades / {ca.get('active_days')} days")
     if report["issues"]:
         L.append("-" * 60)
         L.append("Findings (severity-ordered):")

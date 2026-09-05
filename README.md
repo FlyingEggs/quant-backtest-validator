@@ -17,7 +17,7 @@ print(audit_text(strategy, df, ...))
 ```bash
 python3 examples/audit_demo.py                   # two full client-style reports -> ./reports/
 python3 examples/demo.py                         # six mechanistic archetypes (primitives)
-python3 -m unittest discover -s tests -v         # 109 unit tests (adversarial + V3 engines)
+python3 -m unittest discover -s tests -v         # 114 unit tests (adversarial + V3 engines)
 ```
 
 ## What it is (and is not)
@@ -48,7 +48,7 @@ quant-backtest-validator/
 │   ├── audit.py           # audit() / audit_text() entry points
 │   └── types.py           # Strategy / DataSpec contracts
 ├── examples/  (audit_demo.py, demo.py)
-├── tests/     (109 unit tests)
+├── tests/     (114 unit tests)
 └── reports/   (sample JSON reports produced by audit_demo.py)
 ```
 
@@ -71,9 +71,10 @@ strategies must never get a clean bill, legitimate ones must never be auto-FAILE
 | 11 overlapping-but-legit | PASS (scoped); dependence discounts, never kills | ✓ |
 | 12 regime strategy | PASS (scoped) | ✓ |
 
-Known capability gaps are `skip`ped with the reason stated (survivorship bias, 2D
-parameter island, MTF temporal engine, mechanical leak *proof*) — boundaries are
-documented, never faked as PASS.
+Known capability gaps are `skip`ped with the reason stated (survivorship bias,
+mechanical leak *proof*) — boundaries are documented, never faked as PASS.
+2D parameter island detection was a documented gap until V3.4 and is now a live
+assertion (`config['surface']`), not a skip.
 
 ## Statistics grading (v2.1.1)
 
@@ -251,7 +252,6 @@ Activated by `config["surface"] = {"x","y","x_values","y_values"}`. On a 2D pnl 
 | Intrabar execution model (partial fills, queue) | roadmap |
 | OOS / Walk-Forward contract (V3.3) | ✅ boundary policy + parameter freeze + multi-window WF |
 | Parameter surface (V3.4) | ✅ 2D plateau/island/ridge + trade clustering |
-| Parameter surface (2D island) / cluster dependence | roadmap |
 
 ## Honesty notes
 

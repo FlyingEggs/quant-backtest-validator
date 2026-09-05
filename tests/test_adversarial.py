@@ -18,6 +18,7 @@ import pandas as pd
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from validator import audit, DataSpec, Strategy, as_code_strategy, randomized_control
+from validator import robustness as rob_mod
 from validator import statistics as stats_mod
 from examples import demo as D
 
@@ -231,8 +232,47 @@ class TestKnownGaps(unittest.TestCase):
                       "not hidden).")
 
     def test_08_parameter_island_2d(self):
-        self.skipTest("2D parameter-surface island detection is V2.2+ (PARAM_ISLAND); "
-                      "today only adjacent 1D cliffs (PARAM_CLIFF) are detected.")
+        # V3.4: the 2D surface engine (config['surface']) detects genuine parameter
+        # islands end-to-end through the Robustness section - the old 1D-only gap
+        # is closed, so this is a live assertion, not a documented skip.
+        def run(frame, params):
+            x, y = float(params["x"]), float(params["y"])
+            return {"pnl": 1000.0 if (x == 0.0 and y == 0.0) else 10.0,
+                    "trades": 100}
+        strat = Strategy(name="island", run=run,
+                         default_params={"x": 0, "y": 0},
+                         param_grid={"x": [-2, -1, 0, 1, 2],
+                                     "y": [-2, -1, 0, 1, 2]},
+                         entry_semantics="next_open")
+        rep = rob_mod.check(strat, D.regime_trend_df(), SPEC,
+                            {"surface": {"x": "x", "y": "y",
+                                         "x_values": [-2, -1, 0, 1, 2],
+                                         "y_values": [-2, -1, 0, 1, 2]}})
+        codes = {i["code"] for i in rep["issues"]}
+        self.assertIn("PARAM_ISLAND", codes)          # island caught via surface engine
+        self.assertIn("CONDITIONAL PASS", rep["status"])  # ... as P1, not a silent PASS
+        sa = (rep.get("evidence") or {}).get("surface")
+        self.assertIsNotNone(sa)                      # evidence survives into the section
+        self.assertEqual(sa["verdict"], "ISLAND")
+
+    def test_09_parameter_plateau_no_island_via_robustness(self):
+        # FP guard: a smooth plateau must NOT be flagged PARAM_ISLAND through the
+        # same integrated path (surface engine + robustness assembly).
+        def run(frame, params):
+            x, y = float(params["x"]), float(params["y"])
+            return {"pnl": 100.0 - 0.1 * (x * x + y * y), "trades": 100}
+        strat = Strategy(name="plateau", run=run,
+                         default_params={"x": 0, "y": 0},
+                         param_grid={"x": [-2, -1, 0, 1, 2],
+                                     "y": [-2, -1, 0, 1, 2]},
+                         entry_semantics="next_open")
+        rep = rob_mod.check(strat, D.regime_trend_df(), SPEC,
+                            {"surface": {"x": "x", "y": "y",
+                                         "x_values": [-2, -1, 0, 1, 2],
+                                         "y_values": [-2, -1, 0, 1, 2]}})
+        codes = {i["code"] for i in rep["issues"]}
+        self.assertNotIn("PARAM_ISLAND", codes)       # plateau never an island
+        self.assertEqual(rep["status"], "PASS")       # clean status end-to-end
 
     def test_03_future_signal_proof(self):
         self.skipTest("lag collapse is P1 evidence; *proving* the leak is a code-review "
