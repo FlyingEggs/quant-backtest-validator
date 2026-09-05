@@ -22,7 +22,7 @@ print(audit_text(strategy, df, ...))
 ```bash
 python3 examples/audit_demo.py                   # two full client-style reports -> ./reports/
 python3 examples/demo.py                         # six mechanistic archetypes (primitives)
-python3 -m unittest discover -s tests -v         # 146 unit tests (adversarial + V3 engines)
+python3 -m unittest discover -s tests -v         # 166 unit tests (adversarial + V3 engines)
 ```
 
 ## What it is (and is not)
@@ -53,7 +53,7 @@ quant-backtest-validator/
 │   ├── audit.py           # audit() / audit_text() entry points
 │   └── types.py           # Strategy / DataSpec contracts
 ├── examples/  (audit_demo.py, demo.py)
-├── tests/     (146 unit tests)
+├── tests/     (166 unit tests)
 └── reports/   (sample JSON reports produced by audit_demo.py)
 ```
 
@@ -242,6 +242,31 @@ Result: a `PERFORMANCE AUDIT` table (Gross, per-layer drags, Net, Cost Drag) + p
 sub-model PASS/NOT VERIFIED. Pure per-trade (order-invariant, no future/cross-row data) -
 Case-5. Costs section states: no config => NOT VERIFIED · config, no trades_log =>
 DECLARED · config + trades_log => VERIFIED (net audited).
+
+## V3.5 — Invariants (adverse-cost, data-finite, state-consistency)
+
+Three hard guarantees added after an adversarial cost round (V3.5.0):
+
+* **Adverse-cost invariant** — the promise *"every fill is adjusted AGAINST the trader"*
+  is now *enforced*, not just intended. A configured cost layer that would PAY the trader
+  is rejected: static negative params (`COST_NEGATIVE`, P0) and runtime negative charges
+  from callable modes (`COST_ENGINE_INVARIANT`, P0, engine verdict FAIL). **Financing is
+  the sole exempt layer** — real funding regimes go negative (longs are paid), so a
+  negative funding parameter is market semantics, not a cheat.
+* **Data-finite invariant** — `+-inf` OHLC is a hard P0 (`DATA_NONFINITE`); it passes
+  neither `<= 0` nor `isna()` and would silently poison signal/PnL/statistics/surface.
+* **State-consistency** — VERIFIED with a dead sub-model is state leakage: a configured
+  sub-model that cannot be verified (e.g. financing without `entry_ts/exit_ts`) downgrades
+  the Costs section to NOT VERIFIED (`COST_SUB_INCOMPLETE`, P3) and the overall audit to
+  INCOMPLETE — never a clean VERIFIED.
+* **Config hygiene** — legacy flat-bps keys (`fee_bps`/`slippage_bps`) are not consumed by
+  the V3.2 engine; they are reported `COST_CONFIG_UNUSED` (P2) instead of silently doing
+  nothing while the section claims VERIFIED.
+* **Declared data semantics** — `DataSpec.bar_timestamp_semantics` (`OPEN` default; MTF
+  and execution timelines model the index as bar OPEN). A `CLOSE`-indexed frame is flagged
+  `DATA_TS_SEMANTICS` (P3). MTF custom callable transforms are DECLARED
+  (`MTF_TRANSFORM_DECLARED`, P3): the engine cannot see inside a callable, so a custom
+  transform never yields a verified PASS — a detected leak on one still FAILs.
 
 ## V3.3 — OOS / Walk-Forward research contract
 

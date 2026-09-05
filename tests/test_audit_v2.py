@@ -36,7 +36,9 @@ class TestAuditOverall(unittest.TestCase):
                                  entry_semantics="next_open")
         rep = audit(strat, df, SPEC,
                     {"expansion_confirmation": "completed",
-                     "cost": {"fee_bps": 4.0, "slippage_bps": 2.0},
+                     "cost": {"commission": {"mode": "bps", "open_rate": 4.0, "close_rate": 4.0},
+                    "slippage": {"mode": "bps", "value_bps": 2.0},
+                    "tick_size": None},
                      "seed": 11})
         # 4-state contract: MTF is on the roadmap -> NOT VERIFIED -> INCOMPLETE,
         # even though every implemented section is clean.
@@ -58,7 +60,9 @@ class TestAuditOverall(unittest.TestCase):
         strat = as_code_strategy("honest", df, "sig", D.next_open_hold(5),
                                  entry_semantics="next_open")
         cfg = {"expansion_confirmation": "completed",
-               "cost": {"fee_bps": 4.0, "slippage_bps": 2.0}, "seed": 11,
+               "cost": {"commission": {"mode": "bps", "open_rate": 4.0, "close_rate": 4.0},
+                    "slippage": {"mode": "bps", "value_bps": 2.0},
+                    "tick_size": None}, "seed": 11,
                "scope": ["Data Integrity", "Look-ahead", "Execution",
                          "Statistics", "Robustness", "Costs"]}     # MTF out of scope
         rep = audit(strat, df, SPEC, cfg)

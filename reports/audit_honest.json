@@ -1,5 +1,5 @@
 {
-  "engine_version": "3.4.2",
+  "engine_version": "3.5.0",
   "strategy": "EMA-trend (next-open, hold 5)",
   "scope": [
     "Data Integrity",
@@ -103,16 +103,18 @@
       "status": "VERIFIED",
       "issues": [],
       "notes": [
-        "net PnL 48,883.82 vs gross 48,883.82 (cost drag 0.0%)",
-        "sub-models: commission=NOT VERIFIED, spread=NOT VERIFIED, slippage=NOT VERIFIED, tick_size=NOT VERIFIED, market_impact=NOT VERIFIED, financing=NOT VERIFIED"
+        "net PnL 44,148.90 vs gross 48,883.82 (cost drag 9.69%)",
+        "sub-models: commission=PASS, spread=NOT VERIFIED, slippage=PASS, tick_size=NOT VERIFIED, market_impact=NOT VERIFIED, financing=NOT VERIFIED"
       ],
       "evidence": {
         "net": {
           "verdict": "VERIFIED",
+          "issues": [],
+          "declared_missing": [],
           "gross_pnl": 48883.82028957915,
-          "net_pnl": 48883.82028957915,
-          "cost_drag_pct": 0.0,
-          "total_cost": 0.0,
+          "net_pnl": 44148.90067361624,
+          "cost_drag_pct": 9.69,
+          "total_cost": 4734.919615962905,
           "table": [
             [
               "Gross PnL",
@@ -131,7 +133,7 @@
             ],
             [
               "Slippage",
-              -0.0,
+              -1578.3065,
               false
             ],
             [
@@ -141,7 +143,7 @@
             ],
             [
               "Commission",
-              -0.0,
+              -3156.6131,
               false
             ],
             [
@@ -151,14 +153,14 @@
             ],
             [
               "Net PnL",
-              48883.8203,
+              44148.9007,
               true
             ]
           ],
           "sub_models": {
-            "commission": "NOT VERIFIED",
+            "commission": "PASS",
             "spread": "NOT VERIFIED",
-            "slippage": "NOT VERIFIED",
+            "slippage": "PASS",
             "tick_size": "NOT VERIFIED",
             "market_impact": "NOT VERIFIED",
             "financing": "NOT VERIFIED"

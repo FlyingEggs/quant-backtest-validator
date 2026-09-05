@@ -1,5 +1,5 @@
 {
-  "engine_version": "3.4.2",
+  "engine_version": "3.5.0",
   "strategy": "same-bar confirmation fill",
   "scope": [
     "Data Integrity",

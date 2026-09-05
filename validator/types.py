@@ -41,6 +41,11 @@ class DataSpec:
     # V3: higher-timeframe frames for MTF temporal-availability checks.
     # name -> DataFrame with a DatetimeIndex (bar OPEN) and the value column used.
     timeframes: Dict[str, pd.DataFrame] = field(default_factory=dict)
+    # Data semantics contract: MTF temporal availability and the execution
+    # timeline model the frame index as the bar OPEN time. Frames indexed by bar
+    # CLOSE must declare so (data_integrity reports DATA_TS_SEMANTICS instead of
+    # blessing a CLOSE-indexed frame with OPEN-semantics checks).
+    bar_timestamp_semantics: str = "OPEN"   # "OPEN" | "CLOSE"
 
 
 def as_strategy(name: str, run_df: Callable[[pd.DataFrame], Dict],

@@ -41,7 +41,9 @@ def main() -> None:
     print("\n################  AUDIT #1: HONEST STRATEGY  ################")
     strat1, df1 = honest_strategy()
     cfg1 = {"expansion_confirmation": "completed",
-            "cost": {"fee_bps": 4.0, "slippage_bps": 2.0},
+            "cost": {"commission": {"mode": "bps", "open_rate": 4.0, "close_rate": 4.0},
+                 "slippage": {"mode": "bps", "value_bps": 2.0},
+                 "tick_size": None},
             "seed": 11}
     rep1 = audit(strat1, df1, spec, cfg1)
     print(audit_text(strat1, df1, spec, cfg1))

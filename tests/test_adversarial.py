@@ -32,7 +32,9 @@ def pcode(rep, code):
 def scoped_clean_cfg(**over):
     """Scope minus MTF (roadmap), costs declared: enables a genuine PASS test."""
     cfg = {"expansion_confirmation": "completed",
-           "cost": {"fee_bps": 4.0, "slippage_bps": 2.0},
+           "cost": {"commission": {"mode": "bps", "open_rate": 4.0, "close_rate": 4.0},
+                "slippage": {"mode": "bps", "value_bps": 2.0},
+                "tick_size": None},
            "scope": ["Data Integrity", "Look-ahead", "Execution",
                      "Statistics", "Robustness", "Costs"]}
     cfg.update(over)

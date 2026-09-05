@@ -146,6 +146,21 @@ def check(df: pd.DataFrame, spec: DataSpec, config: Dict) -> Dict:
     rep = temporal_availability(df, m["col"], spec.timeframes[name],
                                 int(m.get("frame_seconds", 0)),
                                 spec.bar_seconds, transform=m.get("transform"))
+    tr = m.get("transform")
+    if callable(tr):
+        # a custom callable transform may embed future access (e.g. shift(-1)) and
+        # the engine cannot see inside it - the attribution ran on a DECLARED
+        # column, which is not the same as a verified one.
+        note = ("custom callable transform: causality NOT mechanically verified "
+                "(DECLARED) - provide an identity/sign_diff binding or a causal "
+                "contract for a verified verdict")
+        if rep["verdict"] == "FAIL":
+            return {"status": "FAIL", "issues": rep["issues"],
+                    "notes": [note] + [rep]}
+        return {"status": "NOT VERIFIED",
+                "issues": [{"code": "MTF_TRANSFORM_DECLARED", "severity": "P3",
+                            "finding": note}],
+                "notes": [rep.get("reason", "custom transform")] + [rep]}
     if rep["verdict"] == "FAIL":
         return {"status": "FAIL", "issues": rep["issues"], "notes": rep}
     if rep["verdict"] == "PASS":

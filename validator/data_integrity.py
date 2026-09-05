@@ -8,6 +8,11 @@ import numpy as np
 import pandas as pd
 
 REQUIRED_COLS = ("open", "high", "low", "close")
+# MTF availability / execution timelines model bar timestamps as bar OPEN. Frames
+# whose index records bar CLOSE must be declared so the audit can refuse to bless
+# them silently.
+OPEN_TIMESTAMP_SEMANTICS = "OPEN"
+CLOSE_TIMESTAMP_SEMANTICS = "CLOSE"
 
 
 def check(df: pd.DataFrame, spec=None) -> Dict:
@@ -24,6 +29,14 @@ def check(df: pd.DataFrame, spec=None) -> Dict:
         if dups:
             issues.append({"code": "DATA_DUP", "severity": "P1",
                            "finding": f"{dups} duplicate timestamps present"})
+        sem = getattr(spec, "bar_timestamp_semantics", OPEN_TIMESTAMP_SEMANTICS)
+        if sem == CLOSE_TIMESTAMP_SEMANTICS:
+            issues.append({"code": "DATA_TS_SEMANTICS", "severity": "P3",
+                           "finding": "DataSpec declares bar timestamps as CLOSE - "
+                                      "MTF temporal availability and execution "
+                                      "timelines model timestamps as bar OPEN; a "
+                                      "CLOSE-indexed frame needs explicit shifting "
+                                      "before temporal checks are meaningful"})
 
     missing = [c for c in REQUIRED_COLS if c not in df.columns]
     if missing:
@@ -50,6 +63,14 @@ def check(df: pd.DataFrame, spec=None) -> Dict:
     if nan_cells:
         issues.append({"code": "DATA_NAN", "severity": "P1",
                        "finding": f"{nan_cells} NaN cells in OHLC"})
+    # +-inf is neither caught by `<= 0` nor by isna(): it would silently poison
+    # every downstream layer (signal / PnL / statistics / surface), so it is a
+    # hard P0, not a P1.
+    inf_cells = int(np.isinf(df[list(REQUIRED_COLS)].to_numpy()).sum())
+    if inf_cells:
+        issues.append({"code": "DATA_NONFINITE", "severity": "P0",
+                       "finding": f"{inf_cells} infinite (+-inf) cells in OHLC - "
+                                  f"prices must be finite; reject before any audit"})
 
     status = "FAIL" if any(i["severity"] == "P0" for i in issues) else \
              ("CONDITIONAL PASS" if any(i["severity"] == "P1" for i in issues) else "PASS")
