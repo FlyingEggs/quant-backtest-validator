@@ -116,6 +116,24 @@ def check(strategy: Strategy, df: pd.DataFrame, spec: DataSpec, config: Dict) ->
     if rc_degen:
         notes.append(rc_degen)
 
+    # ---- V3.4: 2D parameter surface (explicit config) -------------------------
+    if config.get("surface"):
+        from validator import surface as surf
+        sa = surf.surface_audit(strategy, df, config)
+        for i in sa["issues"]:
+            issues.append(i)
+        notes.append(f"parameter surface: {sa.get('verdict', 'n/a')} "
+                     f"(best {sa.get('best_pnl')}, plateau {sa.get('plateau_frac')})")
+
+    # ---- V3.4: trade clustering (optional; needs trades_log) ------------------
+    if config.get("cluster_audit"):
+        from validator import surface as surf
+        res = run_metrics(strategy, df)
+        ca = surf.cluster_audit(res.get("trades_log") or [])
+        issues.extend(ca["issues"])
+        notes.append(f"trade clustering: {ca.get('verdict', 'n/a')} "
+                     f"({ca.get('raw_trades')} trades / {ca.get('active_days')} days)")
+
     # ---- V3.3: OOS / Walk-Forward contract (activates with config['oos']) ----
     if config.get("oos"):
         from validator import wf as wfmod

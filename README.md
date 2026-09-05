@@ -17,7 +17,7 @@ print(audit_text(strategy, df, ...))
 ```bash
 python3 examples/audit_demo.py                   # two full client-style reports -> ./reports/
 python3 examples/demo.py                         # six mechanistic archetypes (primitives)
-python3 -m unittest discover -s tests -v         # 75 unit tests (adversarial + V3 engines)
+python3 -m unittest discover -s tests -v         # 109 unit tests (adversarial + V3 engines)
 ```
 
 ## What it is (and is not)
@@ -42,12 +42,13 @@ quant-backtest-validator/
 │   ├── costs.py           # cost section gate (NOT VERIFIED/DECLARED/VERIFIED)
 │   ├── costengine.py      # V3.2 net-PnL engine (adverse fills, tick, spread/slip/impact)
 │   ├── wf.py               # V3.3 OOS/WF contract (boundary policy, param freeze)
+│   ├── surface.py          # V3.4 2D parameter surface (plateau/island/ridge) + clustering
 │   ├── mtf.py             # V3 temporal-availability engine (legal vs naive)
 │   ├── report.py          # verdict assembly, reliability score, text render
 │   ├── audit.py           # audit() / audit_text() entry points
 │   └── types.py           # Strategy / DataSpec contracts
 ├── examples/  (audit_demo.py, demo.py)
-├── tests/     (75 unit tests)
+├── tests/     (109 unit tests)
 └── reports/   (sample JSON reports produced by audit_demo.py)
 ```
 
@@ -227,6 +228,19 @@ Activated by `config["oos"]`. Three machine contracts:
   PnL, PnL/trade, trades, status; aggregates positive-window %, expectancy
   consistency, trade adequacy (never a bare positive-window ratio).
 
+## V3.4 — Parameter Surface (plateau / island / ridge) + trade clustering
+
+Activated by `config["surface"] = {"x","y","x_values","y_values"}`. On a 2D pnl grid:
+
+* **PLATEAU**  - >=60% of cells within 70% of best -> robust region (healthy).
+* **ISLAND**   - best point isolated (all orthogonal neighbours < 70% of best) AND
+  plateau < 25% -> parameter-mining island, **PARAM_ISLAND (P1)**.
+* **RIDGE**    - best along one axis only -> one parameter informs, the other is noise
+  (**PARAM_RIDGE P2**).
+* **NOISY**    - fragmented surface.
+* `cluster_audit(trades_log)` - trades concentrated in few calendar days =>
+  **TRADE_CLUSTERING (P3)** block dependence (not iid samples).
+
 ## Roadmap (open items, by design)
 
 | Module | Status |
@@ -236,7 +250,7 @@ Activated by `config["oos"]`. Three machine contracts:
 | Real cost engine (V3.2) | ✅ net-PnL engine - adverse fills, tick, spread/slip/impact/commission/financing |
 | Intrabar execution model (partial fills, queue) | roadmap |
 | OOS / Walk-Forward contract (V3.3) | ✅ boundary policy + parameter freeze + multi-window WF |
-| Parameter surface (2D island) / cluster dependence | next (V3.4) |
+| Parameter surface (V3.4) | ✅ 2D plateau/island/ridge + trade clustering |
 | Parameter surface (2D island) / cluster dependence | roadmap |
 
 ## Honesty notes
