@@ -159,7 +159,6 @@ def walk_forward_audit(strategy: Strategy, df: pd.DataFrame,
     supports = getattr(strategy, "supports_from_bar", False)
 
     rows = []
-    excluded_total = 0
     for w in range(n_windows):
         o_start = min_is_bars + w * oos_bars
         o_end = min(o_start + oos_bars, n)
@@ -173,10 +172,12 @@ def walk_forward_audit(strategy: Strategy, df: pd.DataFrame,
         is_f = filter_trades(is_trades, float(times[0]), lo_s, policy)
         is_m = _sum_pnl(is_f["kept"])
 
-        # OOS window: warm-up context (full history) when supported, else cold slice
+        # OOS window: warm-up context (full history) when supported, else cold slice.
+        # _from_bar = o_start-1 so a signal on the LAST IS bar (whose fill lands at the
+        # OOS open) is generated; the boundary policy then decides where it belongs.
         params = dict(strategy.default_params or {})
         if supports:
-            params["_from_bar"] = o_start
+            params["_from_bar"] = max(0, o_start - 1)
             oos_res = run_metrics(strategy, df.iloc[:o_end], params)
         else:
             oos_res = run_metrics(strategy, df.iloc[o_start:o_end])
@@ -229,4 +230,4 @@ def walk_forward_audit(strategy: Strategy, df: pd.DataFrame,
             "expectancy_consistency_pct": (round(consist_pct, 3)
                                            if consist_pct is not None else None),
             "trade_adequacy_pct": round(adequacy_pct, 3),
-            "cross_boundary_total": excluded_total}
+            "cross_boundary_total": int(sum(r["cross_boundary"] for r in rows))}
