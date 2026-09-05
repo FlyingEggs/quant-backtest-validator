@@ -1,13 +1,65 @@
-"""Execution section (V2) — entry semantics + fill-timing perturbation evidence."""
+"""Execution section (V3.1) — entry semantics + fill-timing perturbation +
+information-boundary timeline (t_information -> t_decision -> t_order -> t_fill).
+
+Timeline audit (P0): the strategy may return per-trade records
+`trades=[{"signal_ts": ..., "entry_ts": ..., ...}]`. A fill whose timestamp is NOT
+strictly after its signal timestamp used information before it was actionable
+(e.g. "decide at 09:35 close, fill at 09:35 close"). Without per-trade timestamps
+this sub-check is honestly NOT VERIFIED (the perturbation test still runs).
+"""
 
 from __future__ import annotations
 
-from typing import Dict
+from typing import Dict, List
 
+import numpy as np
 import pandas as pd
 
 from validator import core
 from validator.types import DataSpec, Strategy, run_metrics
+
+
+def _to_seconds(ts) -> float:
+    """Normalise np.datetime64 / pandas Timestamp / epoch-ms|ns|s ints to seconds."""
+    if ts is None:
+        return float("nan")
+    if isinstance(ts, np.datetime64):
+        return float(ts.astype("datetime64[ns]").astype(np.int64)) / 1e9
+    try:
+        val = float(ts.value if isinstance(ts, pd.Timestamp) else ts)
+    except AttributeError:
+        val = float(ts)
+    if val > 1e17:            # ns
+        return val / 1e9
+    if val > 1e13:            # ms
+        return val / 1e3
+    return val                # seconds (or plain numeric comparison axis)
+
+
+def timeline_audit(trades: List[Dict], min_latency_s: float = 0.0) -> Dict:
+    """Mechanical check of the information boundary on per-trade timestamps."""
+    need = {"signal_ts", "entry_ts"}
+    missing = [i for i, t in enumerate(trades) if not need.issubset(t)]
+    if missing:
+        return {"verdict": "NOT VERIFIED",
+                "reason": f"{len(missing)}/{len(trades)} trades lack signal_ts/entry_ts",
+                "violations": []}
+    violations = []
+    for i, t in enumerate(trades):
+        d = _to_seconds(t["entry_ts"]) - _to_seconds(t["signal_ts"])
+        if not np.isfinite(d):
+            continue
+        if d <= min_latency_s:                 # fill not strictly after information
+            violations.append({"trade": i, "gap_s": round(d, 3),
+                               "signal_ts": str(t["signal_ts"]),
+                               "entry_ts": str(t["entry_ts"])})
+    if violations:
+        return {"verdict": "FAIL", "violations": violations,
+                "reason": f"{len(violations)}/{len(trades)} fills at or before their "
+                          f"signal time - information used before it was actionable"}
+    return {"verdict": "PASS", "violations": [],
+            "reason": f"{len(trades)} trades: entry strictly after signal "
+                      f"(min latency {min_latency_s}s)"}
 
 
 def check(strategy: Strategy, df: pd.DataFrame, spec: DataSpec, config: Dict) -> Dict:
@@ -24,6 +76,7 @@ def check(strategy: Strategy, df: pd.DataFrame, spec: DataSpec, config: Dict) ->
     # 2) fill-timing perturbation: always computable via run() (generic, black-box ok)
     def bt(frame: pd.DataFrame) -> Dict:
         return run_metrics(strategy, frame)
+    base_res = bt(df)
     fill = core.fill_timing_sensitivity(df, bt, verbose=False)
     if fill["verdict"] == "FAIL":
         ret = float("nan")
@@ -40,6 +93,20 @@ def check(strategy: Strategy, df: pd.DataFrame, spec: DataSpec, config: Dict) ->
         issues.append({"code": "FILL_SENSITIVE", "severity": "P2",
                        "finding": "fills moderately timing-sensitive (perturbation)"})
     notes.append(f"fill perturbation={fill['verdict']}, price_cols={list(fill['price_cols'])}")
+
+    # 3) information-boundary timeline (needs per-trade timestamps via 'trades_log')
+    trades = base_res.get("trades_log")
+    if isinstance(trades, list) and trades:
+        tl = timeline_audit(trades, min_latency_s=float(config.get("min_latency_s", 0.0)))
+        if tl["verdict"] == "FAIL":
+            issues.append({"code": "EXECUTION_TIMELINE", "severity": "P0",
+                           "finding": tl["reason"] + f" (first violations: "
+                           f"{[v['trade'] for v in tl['violations'][:3]]})"})
+        notes.append(f"information-boundary timeline={tl['verdict']} "
+                     f"({tl.get('reason', '')})")
+    else:
+        notes.append("information-boundary timeline NOT VERIFIED - strategy returned no "
+                     "per-trade signal_ts/entry_ts records (perturbation test still ran)")
 
     status = "FAIL" if any(i["severity"] == "P0" for i in issues) else \
              ("CONDITIONAL PASS" if any(i["severity"] == "P1" for i in issues) else "PASS")

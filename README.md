@@ -17,7 +17,7 @@ print(audit_text(strategy, df, ...))
 ```bash
 python3 examples/audit_demo.py                   # two full client-style reports -> ./reports/
 python3 examples/demo.py                         # six mechanistic archetypes (primitives)
-python3 -m unittest discover -s tests -v         # 53 unit tests (adversarial + V3 MTF)
+python3 -m unittest discover -s tests -v         # 60 unit tests (adversarial + V3 MTF + V3.1 timeline)
 ```
 
 ## What it is (and is not)
@@ -174,13 +174,30 @@ cfg = {"mtf": {"col": "sig", "frame": "h1",
                "frame_seconds": 3600, "transform": "sign_diff"}}
 ```
 
+## V3.1 — Execution / Information Boundary
+
+The perturbation test cannot prove the "decide at 09:35 close, fill at 09:35 close"
+cheat. V3.1 adds a mechanical timeline over per-trade records
+(`run()` returns optional `trades_log=[{"signal_ts", "entry_ts", ...}]`):
+
+```
+t_information (bar close)  ->  t_decision  ->  t_order  ->  t_fill
+```
+
+Every fill with `entry_ts <= signal_ts (+ min_latency_s)` is **EXECUTION_TIMELINE
+(P0)** — information used before it was actionable. Legal next-open fills pass; a
+strategy without per-trade timestamps reports this sub-check as NOT VERIFIED
+(honest; the perturbation test still runs). `timeline_audit()` is unit-testable
+directly and accepts datetime64 / pandas Timestamp / epoch ints.
+
 ## Roadmap (open items, by design)
 
 | Module | Status |
 |---|---|
-| Execution model (intrabar stops/limits, slippage) | roadmap |
-| Real cost engine (funding history, fee schedules) | gate in place — `NOT VERIFIED` until supplied |
-| MTF temporal availability (V3) | ✅ implemented — legal-vs-naive engine, needs binding + frames |
+| MTF temporal availability (V3) | ✅ legal-vs-naive engine |
+| Execution / information boundary (V3.1) | ✅ timeline audit (`trades_log`), EXECUTION_TIMELINE P0 |
+| Intrabar execution model (stops/limits, partial fills) | roadmap |
+| Real cost engine (commission/spread/slippage/market impact -> Net PnL) | next (V3.2) — gate in place |
 | OOS trade-boundary policy + multi-window walk-forward | roadmap |
 | Parameter surface (2D island) / cluster dependence | roadmap |
 
