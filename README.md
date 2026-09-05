@@ -17,7 +17,7 @@ print(audit_text(strategy, df, ...))
 ```bash
 python3 examples/audit_demo.py                   # two full client-style reports -> ./reports/
 python3 examples/demo.py                         # six mechanistic archetypes (primitives)
-python3 -m unittest discover -s tests -v         # 114 unit tests (adversarial + V3 engines)
+python3 -m unittest discover -s tests -v         # 130 unit tests (adversarial + V3 engines)
 ```
 
 ## What it is (and is not)
@@ -48,7 +48,7 @@ quant-backtest-validator/
 │   ├── audit.py           # audit() / audit_text() entry points
 │   └── types.py           # Strategy / DataSpec contracts
 ├── examples/  (audit_demo.py, demo.py)
-├── tests/     (114 unit tests)
+├── tests/     (130 unit tests)
 └── reports/   (sample JSON reports produced by audit_demo.py)
 ```
 
@@ -239,8 +239,14 @@ Activated by `config["surface"] = {"x","y","x_values","y_values"}`. On a 2D pnl 
 * **RIDGE**    - best along one axis only -> one parameter informs, the other is noise
   (**PARAM_RIDGE P2**).
 * **NOISY**    - fragmented surface.
+* **NON_FINITE_PNL** - a grid cell exploded (NaN / inf / raised): the surface is
+  *not classifiable* and is reported as **PARAM_NONFINITE_PNL (P1)** with the bad
+  cells located — never silently reclassified, never mistaken for an island.
+* **DEGENERATE_GRID** - fewer than 2 values on an axis: a point/line cannot support
+  plateau/island/ridge claims -> **PARAM_DEGENERATE_GRID (P1)**, not a fake PLATEAU.
 * `cluster_audit(trades_log)` - trades concentrated in few calendar days =>
-  **TRADE_CLUSTERING (P3)** block dependence (not iid samples).
+  **TRADE_CLUSTERING (P3)** block dependence (not iid samples). Timestamps are
+  normalised like the execution timeline (epoch ns/ms/s ints, datetime, ISO strings).
 
 ## Roadmap (open items, by design)
 

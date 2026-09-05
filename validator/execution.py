@@ -25,13 +25,15 @@ def _to_seconds(ts) -> float:
         return float("nan")
     if isinstance(ts, np.datetime64):
         return float(ts.astype("datetime64[ns]").astype(np.int64)) / 1e9
+    if isinstance(ts, str):          # ISO strings ("2025-09-05 10:00:00", ...)
+        ts = pd.Timestamp(ts)
     try:
         val = float(ts.value if isinstance(ts, pd.Timestamp) else ts)
     except AttributeError:
         val = float(ts)
-    if val > 1e17:            # ns
+    if val > 1e16:            # ns (>= ~1973)
         return val / 1e9
-    if val > 1e13:            # ms
+    if val > 1e11:            # ms (>= ~1973-03; modern epoch-ms ~1.7e12 sits here)
         return val / 1e3
     return val                # seconds (or plain numeric comparison axis)
 

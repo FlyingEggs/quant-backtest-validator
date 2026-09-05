@@ -125,6 +125,8 @@ def check(strategy: Strategy, df: pd.DataFrame, spec: DataSpec, config: Dict) ->
             issues.append(i)
         notes.append(f"parameter surface: {sa.get('verdict', 'n/a')} "
                      f"(best {sa.get('best_pnl')}, plateau {sa.get('plateau_frac')})")
+        if sa.get("reason"):
+            notes.append(f"parameter surface detail: {sa['reason']}")
         evidence["surface"] = sa
 
     # ---- V3.4: trade clustering (optional; needs trades_log) ------------------

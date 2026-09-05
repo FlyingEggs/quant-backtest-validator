@@ -37,13 +37,44 @@ def surface_audit(strategy: Strategy, df, config: Dict) -> Dict:
     xs, ys = list(s["x_values"]), list(s["y_values"])
     if not xs or not ys:
         return {"verdict": "NOT VERIFIED", "reason": "empty surface axes", "issues": []}
+    if len(xs) < 2 or len(ys) < 2:
+        return {"verdict": "DEGENERATE_GRID",
+                "reason": "a 2D surface needs >=2 values per axis "
+                          f"(got {len(xs)}x{len(ys)}) - a single point/line cannot "
+                          "support plateau/island/ridge claims",
+                "issues": [{"code": "PARAM_DEGENERATE_GRID", "severity": "P1",
+                            "finding": f"surface grid is {len(xs)}x{len(ys)} - no 2D "
+                            f"structure to classify; widen x_values/y_values or treat "
+                            f"parameter robustness as unverified"}],
+                "shape": [len(xs), len(ys)]}
 
     M = np.empty((len(xs), len(ys)))
+    bad = []
     for i, xi in enumerate(xs):
         for j, yj in enumerate(ys):
             params = dict(strategy.default_params or {})
             params[x], params[y] = xi, yj
-            M[i, j] = _pnl(run_metrics(strategy, df, params))
+            try:
+                val = _pnl(run_metrics(strategy, df, params))
+            except Exception as exc:   # one exploding cell must not sink the audit
+                bad.append(f"({xi}, {yj}) raised {type(exc).__name__}: "
+                           f"{str(exc)[:80]}")
+                M[i, j] = float("nan")
+                continue
+            M[i, j] = val
+            if not np.isfinite(val):
+                bad.append(f"({xi}, {yj}) pnl={val!r}")
+
+    if bad:
+        detail = "; ".join(bad[:6])
+        if len(bad) > 6:
+            detail += f" (+{len(bad) - 6} more)"
+        return {"verdict": "NON_FINITE_PNL", "n_bad": len(bad), "reason": detail,
+                "issues": [{"code": "PARAM_NONFINITE_PNL", "severity": "P1",
+                            "finding": f"{len(bad)} surface cell(s) failed to evaluate "
+                            f"({bad[0]}) - surface not classifiable; fix the strategy "
+                            f"before trusting parameter robustness"}],
+                "shape": [len(xs), len(ys)]}
 
     best = float(np.max(M))
     bi, bj = (int(v) for v in np.unravel_index(np.argmax(M), M.shape))
@@ -114,14 +145,19 @@ def cluster_audit(trades_log: List[Dict]) -> Dict:
     """Block/cluster dependence: how many calendar days actually carry the trades?"""
     if not trades_log:
         return {"verdict": "NOT VERIFIED", "reason": "no trades_log", "issues": []}
+    import pandas as pd
+    from validator.execution import _to_seconds   # same ns/ms/s normalisation as timeline
     days: Dict[str, int] = {}
     for t in trades_log:
         ts = t.get("entry_ts") or t.get("signal_ts")
         if ts is None:
             return {"verdict": "NOT VERIFIED",
                     "reason": "trades lack entry timestamps", "issues": []}
-        import pandas as pd
-        d = pd.Timestamp(ts).strftime("%Y-%m-%d")
+        secs = _to_seconds(ts)
+        if not np.isfinite(secs):
+            return {"verdict": "NOT VERIFIED",
+                    "reason": "trades carry non-finite timestamps", "issues": []}
+        d = pd.Timestamp(secs, unit="s").strftime("%Y-%m-%d")
         days[d] = days.get(d, 0) + 1
     n = len(trades_log)
     counts = sorted(days.values(), reverse=True)
