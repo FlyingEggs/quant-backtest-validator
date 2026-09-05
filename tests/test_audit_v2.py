@@ -46,7 +46,7 @@ class TestAuditOverall(unittest.TestCase):
         self.assertGreaterEqual(rep["verified_score"], 90)
         self.assertLess(rep["verified_score"], 100)       # two P3 hygiene items
         self.assertEqual(rep["reliability_score"], rep["verified_score"])
-        self.assertEqual(rep["sections"]["Costs"]["status"], "DECLARED")
+        self.assertEqual(rep["sections"]["Costs"]["status"], "VERIFIED")
         self.assertIn("MTF", rep["not_verified"])
         self.assertNotIn("Costs", rep["not_verified"])
         self.assertFalse(rep["audit_complete"])

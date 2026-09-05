@@ -34,7 +34,7 @@ def _build_sections(strategy, df, spec, cfg, scope: List[str]) -> Dict[str, Dict
         "Execution": lambda: execution.check(strategy, df, spec, cfg),
         "Statistics": lambda: statistics.check(strategy, df, spec, cfg),
         "Robustness": lambda: robustness.check(strategy, df, spec, cfg),
-        "Costs": lambda: costs.costs_check(cfg),
+        "Costs": lambda: costs.net_check(strategy, df, cfg),
         "MTF": lambda: mtf.check(df, spec, cfg),
     }
     return {name: builders[name]() for name in ALL_SECTIONS if name in scope}

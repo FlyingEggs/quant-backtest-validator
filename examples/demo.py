@@ -27,23 +27,36 @@ from validator import (full_audit, lag_sensitivity, period_expansion,
 
 def next_open_hold(hold: int):
     """Pure strategy fn factory: signal at bar close -> fill at next open, exit after
-    `hold` bars at the open (exit bar's open). Returns {pnl, trades, rets}."""
+    `hold` bars at the open (exit bar's open). Returns {pnl, trades, rets,
+    trades_log(if DatetimeIndex)}."""
     def run(df: pd.DataFrame) -> dict:
         sig = df["sig"].fillna(0).astype(float).values
         o = df["open"].values
         n = len(df)
-        pnl, trades, pos, entry_i, rets = 0.0, 0, 0.0, -1, []
+        dt = isinstance(df.index, pd.DatetimeIndex)
+        pnl, trades, pos, entry_i, rets, log = 0.0, 0, 0.0, -1, [], []
         for i in range(n):
             if pos != 0.0 and i >= entry_i + hold:
-                px = o[min(i, n - 1)]
+                exit_i = min(i, n - 1)
+                px = o[exit_i]
                 pnl += (px - pos) * 1.0
                 rets.append((px - pos) / pos if pos else 0.0)
+                if dt:
+                    log.append({"side": "long", "qty": 1.0,
+                                "signal_ts": df.index[entry_i],
+                                "entry_ts": df.index[entry_i + 1],
+                                "exit_ts": df.index[exit_i],
+                                "entry_price": float(pos),
+                                "exit_price": float(px)})
                 pos = 0.0
             if pos == 0.0 and sig[i] == 1.0 and i + 1 < n:
                 pos = o[i + 1]
                 entry_i = i
                 trades += 1
-        return {"pnl": pnl, "trades": trades, "rets": np.asarray(rets, dtype=float)}
+        res = {"pnl": pnl, "trades": trades, "rets": np.asarray(rets, dtype=float)}
+        if dt:
+            res["trades_log"] = log
+        return res
     return run
 
 

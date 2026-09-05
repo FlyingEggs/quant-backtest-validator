@@ -32,20 +32,28 @@ def assemble_report(strategy_name: str, sections: Dict[str, Dict], config: Dict,
 
     p0 = any(i["severity"] == "P0" for i in issues)
     p1 = any(i["severity"] == "P1" for i in issues)
+    verified_statuses = {"PASS", "CONDITIONAL PASS", "FAIL", "VERIFIED"}
     not_verified = [name for name, sec in sections.items()
                     if sec["status"] == "NOT VERIFIED"]
+    declared = [name for name, sec in sections.items()
+                if sec["status"] == "DECLARED"]
+    uncovered = not_verified + declared
 
+    # 4-state verdict contract (V2.2+): DECLARED is NOT verified - a section whose
+    # capability was only declared (e.g. cost assumptions without a net audit) keeps
+    # the audit INCOMPLETE, exactly like NOT VERIFIED.
     if p0:
         overall = "FAIL"
     elif p1:
         overall = "CONDITIONAL PASS"
-    elif not_verified:
+    elif uncovered:
         overall = "INCOMPLETE"
     else:
         overall = "PASS"
 
     total = len(sections)
-    verified_n = total - len(not_verified)
+    verified_n = sum(1 for _, sec in sections.items()
+                     if sec["status"] in verified_statuses)
     coverage_pct = round(100.0 * verified_n / total) if total else 0
 
     penalty = sum(WEIGHTS.get(i["severity"], 0) for i in issues
@@ -77,11 +85,16 @@ def assemble_report(strategy_name: str, sections: Dict[str, Dict], config: Dict,
                           "execution-semantics review) before relying on reported "
                           "performance")
     elif overall == "INCOMPLETE":
+        parts = []
+        if not_verified:
+            parts.append(f"NOT VERIFIED: {', '.join(not_verified)}")
+        if declared:
+            parts.append(f"DECLARED-but-not-verified: {', '.join(declared)}")
         recommendation = (f"No blocking findings in the VERIFIED scope, but the audit is "
-                          f"INCOMPLETE (coverage {coverage_pct}%; NOT VERIFIED: "
-                          f"{', '.join(not_verified)}). PASS is only granted when every "
-                          f"scope item is verified - complete the scope before treating "
-                          f"this as a clean bill.")
+                          f"INCOMPLETE (coverage {coverage_pct}%; "
+                          f"{'; '.join(parts)}). PASS is only granted when every scope "
+                          f"item is VERIFIED (DECLARED != VERIFIED) - complete the scope "
+                          f"before treating this as a clean bill.")
     else:
         recommendation = ("PASS within the declared scope: every scope item was verified "
                           "and no P0/P1 finding was made. (Scope: " +
@@ -97,6 +110,7 @@ def assemble_report(strategy_name: str, sections: Dict[str, Dict], config: Dict,
         "reliability_score": verified_score,          # deprecated alias
         "coverage_pct": coverage_pct,
         "not_verified": not_verified,
+        "declared": declared,
         "blocking": blocking,
         "statistical_confidence": stat_conf,
         "sections": {k: {kk: vv for kk, vv in v.items()} for k, v in sections.items()},
@@ -130,7 +144,7 @@ def audit_report_text(report: Dict) -> str:
     L.append("-" * 60)
     L.append("AUDIT SCOPE")
     for name, sec in report["sections"].items():
-        mark = "△" if sec["status"] == "NOT VERIFIED" else "✓"
+        mark = "△" if sec["status"] in ("NOT VERIFIED", "DECLARED") else "✓"
         L.append(f"  {mark} {name:<16} {sec['status']}")
     if report["issues"]:
         L.append("-" * 60)

@@ -285,9 +285,11 @@ def randomized_control(df: pd.DataFrame, col: str, bt: _BacktestFn,
         except Exception:
             failed += 1
     arr = np.asarray(shuf_pnls, dtype=float)
+    tr_arr = np.asarray(shuf_trades, dtype=float)
     if len(arr) == 0:
         return {"verdict": "NO_EDGE_VS_SHUFFLED_NULL", "note": "all shuffles failed",
-                "seed": used_seed}
+                "seed": used_seed, "null_zero_trade_frac": 1.0,
+                "shuffled_mean_trades": 0.0}
     pct = {p: float(np.percentile(arr, p)) for p in (25, 50, 75, 95, 99)}
     percentile = float(np.mean(arr < real_pnl) * 100.0)
     p_value = (float(np.sum(arr >= real_pnl)) + 1.0) / (len(arr) + 1.0)
@@ -307,6 +309,10 @@ def randomized_control(df: pd.DataFrame, col: str, bt: _BacktestFn,
            "p99": round(pct[99], 4),
            "percentile": round(percentile, 1), "p_value": round(p_value, 4),
            "n_shuffles": len(arr), "failed_shuffles": failed, "seed": used_seed,
+           "null_zero_trade_frac": round(float(np.mean(tr_arr < 1)), 4)
+           if len(tr_arr) else 1.0,
+           "shuffled_mean_trades": round(float(np.mean(tr_arr)), 2)
+           if len(tr_arr) else 0.0,
            "interpretation": (
                "real signal beats its own time-shuffled null (controls static-exposure "
                "beta; evidence of timing information, not a standalone alpha proof)"

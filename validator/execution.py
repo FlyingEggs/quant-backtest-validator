@@ -81,7 +81,11 @@ def check(strategy: Strategy, df: pd.DataFrame, spec: DataSpec, config: Dict) ->
                        f"model before it can be validated"})
         notes.append("entry semantics not next_open")
 
-    # 2) fill-timing perturbation: always computable via run() (generic, black-box ok)
+    # 2) fill-timing perturbation: ALWAYS evidence (P1), never P0 by itself.
+    # A df-level price shift cannot distinguish "same-bar cheat" from a LEGAL
+    # short-horizon strategy whose edge is the entry bar's own open->close move
+    # (retention ~0 for both). Proof of same-bar cheating needs the entry-semantics
+    # claim or the per-trade timeline; the perturbation only demands investigation.
     def bt(frame: pd.DataFrame) -> Dict:
         return run_metrics(strategy, frame)
     base_res = bt(df)
@@ -90,13 +94,13 @@ def check(strategy: Strategy, df: pd.DataFrame, spec: DataSpec, config: Dict) ->
         ret = float("nan")
         if fill["shifted_pnl"] is not None and abs(fill["base_pnl"]) > 1e-12:
             ret = abs(fill["shifted_pnl"]) / abs(fill["base_pnl"])
-        sev, code = ("P0", "EXECUTION_FILL") if (not _isfinite(ret) or ret < 0.10) else \
-                    ("P1", "EXECUTION_FILL_REVIEW")
-        issues.append({"code": code, "severity": sev,
+        issues.append({"code": "EXECUTION_FILL", "severity": "P1",
                        "finding": f"fill-timing pnl {fill['base_pnl']:,.0f} -> "
                        f"{fill['shifted_pnl']:,.0f} after +{fill['lag_bars']} bar fill "
                        f"shift (retains {ret*100:.1f}%) - perturbation evidence; "
-                       f"corroborate with an execution model before declaring look-ahead"})
+                       f"consistent with same-bar fills OR a legitimate short holding "
+                       f"horizon - corroborate with entry semantics and the per-trade "
+                       f"timeline before declaring look-ahead"})
     elif fill["verdict"] == "SENSITIVE":
         issues.append({"code": "FILL_SENSITIVE", "severity": "P2",
                        "finding": "fills moderately timing-sensitive (perturbation)"})

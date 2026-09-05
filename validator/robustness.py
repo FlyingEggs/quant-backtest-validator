@@ -20,11 +20,16 @@ def check(strategy: Strategy, df: pd.DataFrame, spec: DataSpec, config: Dict) ->
 
     # ---- randomized control (mechanism tier; informational) -------------------
     rc_note = None
+    rc_degen = None
     if strategy.signal_col is not None and strategy.bt_mechanism is not None:
         rc = core.randomized_control(df, strategy.signal_col, strategy.bt_mechanism,
                                      n_shuffles=int(config.get("n_shuffles", 200)),
                                      seed=config.get("seed", 42), verbose=False)
-        if rc["verdict"] != "BEATS_SHUFFLED_NULL":
+        if rc.get("null_zero_trade_frac", 0.0) > 0.9:
+            rc_degen = (f"randomized control null is DEGENERATE: "
+                        f"{rc['null_zero_trade_frac']:.0%} of shuffles produced no "
+                        f"trades - evidence is weak regardless of the verdict label")
+        elif rc["verdict"] != "BEATS_SHUFFLED_NULL":
             rc_note = (f"randomized control {rc['verdict']}: real {rc['real_pnl']:,.0f} vs "
                        f"null p50 {rc['p50']:,.0f} - not clearly better than the "
                        f"time-shuffled null")
@@ -108,6 +113,8 @@ def check(strategy: Strategy, df: pd.DataFrame, spec: DataSpec, config: Dict) ->
 
     if rc_note:
         notes.append(rc_note)
+    if rc_degen:
+        notes.append(rc_degen)
 
     # ---- V3.3: OOS / Walk-Forward contract (activates with config['oos']) ----
     if config.get("oos"):

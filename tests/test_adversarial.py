@@ -81,9 +81,23 @@ class TestNoFalseClean(unittest.TestCase):
         rep = audit(strat, df, SPEC, {"expansion_confirmation": "completed", "seed": 1})
         self.assertEqual(rep["sections"]["Costs"]["status"], "NOT VERIFIED")
         rep2 = audit(strat, df, SPEC, {"expansion_confirmation": "completed",
-                                       "cost": {"fee_bps": 1, "slippage_bps": 1},
+                                       "cost": {"commission": {"mode": "bps",
+                                                               "open_rate": 1.0,
+                                                               "close_rate": 1.0}},
                                        "seed": 1})
-        self.assertEqual(rep2["sections"]["Costs"]["status"], "DECLARED")
+        # demo strategy returns trades_log -> genuinely net-audited (VERIFIED), or
+        # DECLARED when the strategy returns no per-trade fills - never a silent PASS
+        self.assertIn(rep2["sections"]["Costs"]["status"], ("DECLARED", "VERIFIED"))
+
+        def no_log(frame, params):
+            return {"pnl": 1.0, "trades": 10}
+        black = Strategy(name="no-log", run=no_log, entry_semantics="next_open")
+        rep3 = audit(black, df, SPEC, {"expansion_confirmation": "completed",
+                                       "cost": {"commission": {"mode": "bps",
+                                                               "open_rate": 1.0,
+                                                               "close_rate": 1.0}},
+                                       "seed": 1})
+        self.assertEqual(rep3["sections"]["Costs"]["status"], "DECLARED")
 
     def test_07_oos_overfit_conditional(self):
         rets = np.concatenate([np.full(700, 0.01), np.full(300, -0.02)])
@@ -129,9 +143,8 @@ class TestNoFalseClean(unittest.TestCase):
         self.assertEqual(rep["overall"], "INCOMPLETE")       # full default scope
         # policy check: within a complete scope, dependence does not flip the verdict
         no_mtf = {"expansion_confirmation": "completed",
-                  "cost": {"fee_bps": 4.0, "slippage_bps": 2.0},
                   "scope": ["Data Integrity", "Execution", "Statistics",
-                            "Robustness", "Costs"],        # black box: Look-ahead excluded
+                            "Robustness"],                 # black box: no Look-ahead/Costs
                   "seed": 1}
         rep2 = audit(strat, df, SPEC, no_mtf)
         self.assertEqual(rep2["overall"], "PASS")
