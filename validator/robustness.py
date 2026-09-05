@@ -99,6 +99,28 @@ def check(strategy: Strategy, df: pd.DataFrame, spec: DataSpec, config: Dict) ->
 
     if rc_note:
         notes.append(rc_note)
+
+    # ---- V3.3: OOS / Walk-Forward contract (activates with config['oos']) ----
+    if config.get("oos"):
+        from validator import wf as wfmod
+        pf = wfmod.parameter_freeze_audit(strategy, df, config)
+        for i in pf["issues"]:
+            issues.append(i)
+        wf_rep = wfmod.walk_forward_audit(strategy, df, config, spec)
+        for i in wf_rep["issues"]:
+            issues.append(i)
+        notes.append(f"OOS boundary policy: {wf_rep['policy']} - "
+                     f"positive-window {wf_rep['positive_window_pct']:.0%}, "
+                     f"expectancy-consistency "
+                     f"{wf_rep['expectancy_consistency_pct'] if wf_rep['expectancy_consistency_pct'] is not None else 'n/a'}, "
+                     f"trade-adequacy {wf_rep['trade_adequacy_pct']:.0%}")
+        notes.append(f"parameter freeze: determinism={pf['determinism']}, "
+                     f"refit-probe={pf['refit_probe']}")
+        evidence = {"wf": wf_rep, "param_freeze": pf}
+
     status = "FAIL" if any(i["severity"] == "P0" for i in issues) else \
              ("CONDITIONAL PASS" if any(i["severity"] == "P1" for i in issues) else "PASS")
-    return {"status": status, "issues": issues, "notes": notes}
+    out = {"status": status, "issues": issues, "notes": notes}
+    if config.get("oos"):
+        out["evidence"] = evidence
+    return out

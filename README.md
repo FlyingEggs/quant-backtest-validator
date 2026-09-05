@@ -17,7 +17,7 @@ print(audit_text(strategy, df, ...))
 ```bash
 python3 examples/audit_demo.py                   # two full client-style reports -> ./reports/
 python3 examples/demo.py                         # six mechanistic archetypes (primitives)
-python3 -m unittest discover -s tests -v         # 68 unit tests (adversarial + V3 engines)
+python3 -m unittest discover -s tests -v         # 75 unit tests (adversarial + V3 engines)
 ```
 
 ## What it is (and is not)
@@ -41,12 +41,13 @@ quant-backtest-validator/
 │   ├── robustness.py      # randomized control + chronological OOS + param cliffs
 │   ├── costs.py           # cost section gate (NOT VERIFIED/DECLARED/VERIFIED)
 │   ├── costengine.py      # V3.2 net-PnL engine (adverse fills, tick, spread/slip/impact)
+│   ├── wf.py               # V3.3 OOS/WF contract (boundary policy, param freeze)
 │   ├── mtf.py             # V3 temporal-availability engine (legal vs naive)
 │   ├── report.py          # verdict assembly, reliability score, text render
 │   ├── audit.py           # audit() / audit_text() entry points
 │   └── types.py           # Strategy / DataSpec contracts
 ├── examples/  (audit_demo.py, demo.py)
-├── tests/     (68 unit tests)
+├── tests/     (75 unit tests)
 └── reports/   (sample JSON reports produced by audit_demo.py)
 ```
 
@@ -211,6 +212,21 @@ sub-model PASS/NOT VERIFIED. Pure per-trade (order-invariant, no future/cross-ro
 Case-5. Costs section states: no config => NOT VERIFIED · config, no trades_log =>
 DECLARED · config + trades_log => VERIFIED (net audited).
 
+## V3.3 — OOS / Walk-Forward research contract
+
+Activated by `config["oos"]`. Three machine contracts:
+
+* **Trade boundary policy** — `ENTRY_IN_WINDOW | EXIT_IN_WINDOW |
+  FULL_TRADE_IN_WINDOW`; the chosen policy is reported and cross-boundary trades are
+  counted, never silently assigned.
+* **Parameter freeze** — OOS runs must use frozen IS parameters. Two probes:
+  *determinism* (same df+params => same output; else P0 `NON_DETERMINISTIC`) and
+  *refit probe* (declared tunable `param_grid` yet identical output across grid
+  extremes => P0 `PARAM_FREEZE`, internal re-fit / dead parameter suspected).
+* **Walk forward** — expanding-IS / rolling-OOS windows; per-window IS/OOS
+  PnL, PnL/trade, trades, status; aggregates positive-window %, expectancy
+  consistency, trade adequacy (never a bare positive-window ratio).
+
 ## Roadmap (open items, by design)
 
 | Module | Status |
@@ -219,7 +235,8 @@ DECLARED · config + trades_log => VERIFIED (net audited).
 | Execution / information boundary (V3.1) | ✅ timeline audit (`trades_log`), EXECUTION_TIMELINE P0 |
 | Real cost engine (V3.2) | ✅ net-PnL engine - adverse fills, tick, spread/slip/impact/commission/financing |
 | Intrabar execution model (partial fills, queue) | roadmap |
-| OOS trade-boundary policy + multi-window walk-forward | roadmap |
+| OOS / Walk-Forward contract (V3.3) | ✅ boundary policy + parameter freeze + multi-window WF |
+| Parameter surface (2D island) / cluster dependence | next (V3.4) |
 | Parameter surface (2D island) / cluster dependence | roadmap |
 
 ## Honesty notes

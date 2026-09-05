@@ -19,9 +19,9 @@ from validator.types import (
     Strategy, DataSpec, as_strategy, as_code_strategy, default_config,
 )
 from validator import (data_integrity, execution, lookahead, statistics,
-                       robustness, costs, mtf, costengine)
+                       robustness, costs, mtf, costengine, wf)
 
-__version__ = "3.2.0"
+__version__ = "3.3.0"
 __all__ = [
     # primitives
     "EXPANSION_HOURS", "full_audit", "lag_sensitivity", "period_expansion",
@@ -31,7 +31,7 @@ __all__ = [
     "Strategy", "DataSpec", "as_strategy", "as_code_strategy", "default_config",
     "data_integrity", "execution", "lookahead", "statistics", "robustness", "costs",
     # V3 MTF / V3.1 timeline / V3.2 cost engine
-    "mtf", "costengine",
+    "mtf", "costengine", "wf",
     # serialization
     "save_report", "to_jsonable",
     "__version__",
