@@ -130,5 +130,35 @@ class TestMtfInAudit(unittest.TestCase):
         self.assertEqual(rep["overall"], "INCOMPLETE")  # honest, never PASS
 
 
+class TestTransformOutput(unittest.TestCase):
+    """Output-level contract of the low-frame transform helper (mypy pass rewrote
+    the sign_diff branch onto the ndarray; semantics must not drift)."""
+
+    def test_sign_diff_series_semantics(self):
+        idx = pd.Index([10, 11, 12, 13, 14, 15])
+        s = pd.Series([1.0, 2.0, 2.0, np.nan, 0.0, -3.0], index=idx)
+        out = mtf._transform_high(s, "sign_diff")
+        self.assertIsInstance(out, pd.Series)          # stays a Series
+        self.assertEqual(out.index.tolist(), idx.tolist())   # index preserved
+        # sign of diff, NaN (missing close) -> 0, equal values -> 0
+        self.assertEqual(out.tolist(), [0.0, 1.0, 0.0, 0.0, 0.0, -1.0])
+
+    def test_identity_and_none_passthrough(self):
+        s = pd.Series([1.0, 2.0, 3.0])
+        for t in (None, "identity"):
+            out = mtf._transform_high(s, t)
+            self.assertIsInstance(out, pd.Series)
+            self.assertTrue(out.equals(s))
+
+    def test_callable_transform_applied(self):
+        s = pd.Series([1.0, 2.0])
+        self.assertEqual(mtf._transform_high(s, lambda x: x * 2).tolist(),
+                         [2.0, 4.0])
+
+    def test_unknown_transform_raises(self):
+        with self.assertRaises(ValueError):
+            mtf._transform_high(pd.Series([1.0]), "bogus")
+
+
 if __name__ == "__main__":
     unittest.main()
