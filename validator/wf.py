@@ -215,6 +215,12 @@ def walk_forward_audit(strategy: Strategy, df: pd.DataFrame,
     adequacy_pct = adequate / len(rows) if rows else 0.0
 
     issues = []
+    if not rows:
+        issues.append({"code": "WF_NO_WINDOWS", "severity": "P2",
+                       "finding": "no walk-forward windows could be fitted - sample is "
+                                  "shorter than min_is_bars + oos_bars (or n_windows "
+                                  "config) - an empty walk-forward must not read as "
+                                  "clean"})
     if scored and pos_pct < 0.6:
         issues.append({"code": "WF_LOW_CONSISTENCY", "severity": "P1",
                        "finding": f"OOS positive-window rate {pos_pct:.0%} < 60% "

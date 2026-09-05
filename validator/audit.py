@@ -47,6 +47,9 @@ def audit(strategy: Strategy, df: pd.DataFrame,
     cfg = default_config()
     cfg.update(config or {})
     scope = [s for s in ALL_SECTIONS if s in cfg.get("scope", ALL_SECTIONS)]
+    if not scope:
+        raise ValueError(f"config['scope'] matched no known sections: "
+                         f"{cfg.get('scope')!r} (known: {ALL_SECTIONS})")
 
     sections = _build_sections(strategy, df, spec, cfg, scope)
     return report_mod.assemble_report(strategy.name, sections, cfg, ENGINE_VERSION, scope)

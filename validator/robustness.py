@@ -93,6 +93,15 @@ def check(strategy: Strategy, df: pd.DataFrame, spec: DataSpec, config: Dict) ->
             else:
                 notes.append(f"parameter '{pname}' sweep stable "
                              f"(max swing {worst:.1f}x median)")
+            # oscillation guard: adjacent-ratio cliffs miss alternating sign series
+            # (e.g. [-100, +100, -100, +100] => every delta is exactly 2.0x).
+            up = [p > 0 for p in pnls]
+            changes = sum(1 for a, b in zip(up, up[1:]) if a != b)
+            if changes >= 2 and len(pnls) >= 3:
+                issues.append({"code": "PARAM_OSCILLATION", "severity": "P2",
+                               "finding": f"parameter '{pname}' PnL oscillates in sign "
+                               f"across adjacent values ({values} -> {[round(p, 2) for p in pnls]}) "
+                               f"- threshold/overfit sensitivity, not a robust region"})
     else:
         notes.append("parameter sensitivity NOT VERIFIED (needs run(df, params) + "
                      "param_grid)")
