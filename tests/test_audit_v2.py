@@ -133,12 +133,19 @@ class TestAuditOverall(unittest.TestCase):
     def test_costs_three_states(self):
         from validator.costs import costs_check
         self.assertEqual(costs_check({})["status"], "NOT VERIFIED")
-        declared = costs_check({"cost": {"fee_bps": 5, "slippage_bps": 2}})
-        self.assertEqual(declared["status"], "DECLARED")
-        verified = costs_check({"cost": {"fee_bps": 5, "slippage_bps": 2,
-                                         "independently_verified": True}})
+        declared = costs_check({"cost": {"commission": {"mode": "bps",
+                                                        "open_rate": 5.0,
+                                                        "close_rate": 5.0}}})
+        self.assertEqual(declared["status"], "DECLARED")   # no per-trade fills
+        log = [{"side": "long", "entry_price": 100.0, "exit_price": 101.0, "qty": 1.0}]
+        verified = costs_check({"cost": {"commission": {"mode": "bps",
+                                                        "open_rate": 5.0,
+                                                        "close_rate": 5.0},
+                                         "trades_log": log}})
         self.assertEqual(verified["status"], "VERIFIED")
-        bad = costs_check({"cost": {"fee_bps": -1, "slippage_bps": 0}})
+        bad = costs_check({"cost": {"commission": {"mode": "bps",
+                                                   "open_rate": -1.0,
+                                                   "close_rate": 5.0}}})
         self.assertEqual(bad["status"], "FAIL")
 
     def test_oos_warmup_contract(self):

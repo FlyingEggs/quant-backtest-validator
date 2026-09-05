@@ -17,7 +17,7 @@ print(audit_text(strategy, df, ...))
 ```bash
 python3 examples/audit_demo.py                   # two full client-style reports -> ./reports/
 python3 examples/demo.py                         # six mechanistic archetypes (primitives)
-python3 -m unittest discover -s tests -v         # 60 unit tests (adversarial + V3 MTF + V3.1 timeline)
+python3 -m unittest discover -s tests -v         # 68 unit tests (adversarial + V3 engines)
 ```
 
 ## What it is (and is not)
@@ -39,13 +39,14 @@ quant-backtest-validator/
 │   ├── execution.py       # entry semantics + fill-timing perturbation (always)
 │   ├── statistics.py      # return independence / N_eff (needs per-trade rets)
 │   ├── robustness.py      # randomized control + chronological OOS + param cliffs
-│   ├── costs.py           # cost model gate (NOT VERIFIED until supplied)
+│   ├── costs.py           # cost section gate (NOT VERIFIED/DECLARED/VERIFIED)
+│   ├── costengine.py      # V3.2 net-PnL engine (adverse fills, tick, spread/slip/impact)
 │   ├── mtf.py             # V3 temporal-availability engine (legal vs naive)
 │   ├── report.py          # verdict assembly, reliability score, text render
 │   ├── audit.py           # audit() / audit_text() entry points
 │   └── types.py           # Strategy / DataSpec contracts
 ├── examples/  (audit_demo.py, demo.py)
-├── tests/     (27 unit tests)
+├── tests/     (68 unit tests)
 └── reports/   (sample JSON reports produced by audit_demo.py)
 ```
 
@@ -190,14 +191,34 @@ strategy without per-trade timestamps reports this sub-check as NOT VERIFIED
 (honest; the perturbation test still runs). `timeline_audit()` is unit-testable
 directly and accepts datetime64 / pandas Timestamp / epoch ints.
 
+## V3.2 — Realistic Cost & Net PnL Audit
+
+`config['cost']` + per-trade `trades_log` runs the net engine. Every fill is adjusted
+**against the trader** and tick-quantised against the trader (BUY rounds up, SELL rounds
+down), so a cost model can never accidentally improve a fill. Layers report separately:
+
+| Layer | Model | Anti-cheat |
+|---|---|---|
+| Commission | amount/notional/per-contract/fixed; `open_rate != close_rate` | C2 fee asymmetry |
+| Tick size | adversarial quantisation to the legal grid | C3 100.003 -> legal tick |
+| Spread | fixed | pct (half-spread per fill, adverse) | C4 never improves |
+| Slippage | bps | pct | fixed | callable (separate from spread) | C4 never improves |
+| Market impact | none (NOT VERIFIED) | linear | sqrt | callable | interface-first |
+| Financing | funding_bps_per_day over held days (needs `entry_ts/exit_ts`) | honest NOT VERIFIED |
+
+Result: a `PERFORMANCE AUDIT` table (Gross, per-layer drags, Net, Cost Drag) + per
+sub-model PASS/NOT VERIFIED. Pure per-trade (order-invariant, no future/cross-row data) -
+Case-5. Costs section states: no config => NOT VERIFIED · config, no trades_log =>
+DECLARED · config + trades_log => VERIFIED (net audited).
+
 ## Roadmap (open items, by design)
 
 | Module | Status |
 |---|---|
 | MTF temporal availability (V3) | ✅ legal-vs-naive engine |
 | Execution / information boundary (V3.1) | ✅ timeline audit (`trades_log`), EXECUTION_TIMELINE P0 |
-| Intrabar execution model (stops/limits, partial fills) | roadmap |
-| Real cost engine (commission/spread/slippage/market impact -> Net PnL) | next (V3.2) — gate in place |
+| Real cost engine (V3.2) | ✅ net-PnL engine - adverse fills, tick, spread/slip/impact/commission/financing |
+| Intrabar execution model (partial fills, queue) | roadmap |
 | OOS trade-boundary policy + multi-window walk-forward | roadmap |
 | Parameter surface (2D island) / cluster dependence | roadmap |
 

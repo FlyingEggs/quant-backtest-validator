@@ -1,17 +1,21 @@
-"""Costs & MTF sections (V2) — honest NOT VERIFIED until the modules exist."""
+"""Costs section (V3.2) — gate + net-PnL audit.
+
+States:
+  * no config['cost']                        -> NOT VERIFIED (gross PnL is not a claim)
+  * config['cost'] + no per-trade trades_log -> DECLARED (assumptions recorded; the
+    NET audit cannot run without per-trade fills -> NOT VERIFIED, never assumed)
+  * config['cost'] + trades_log              -> VERIFIED (net engine ran; adverse fills,
+    tick quantisation, per-side commission, spread/slippage/impact/financing)
+"""
 
 from __future__ import annotations
 
 from typing import Dict
 
+from validator import costengine
+
 
 def costs_check(config: Dict) -> Dict:
-    """Three states - a declared fee schedule is NOT an independently verified one:
-      * config['cost'] is None            -> NOT VERIFIED
-      * config['cost'] supplied           -> DECLARED  (assumptions recorded)
-      * config['cost']['independently_verified'] -> VERIFIED (only after an independent
-        re-run against exchange schedules / funding history / liquidity)
-    """
     cost = config.get("cost")
     if cost is None:
         return {"status": "NOT VERIFIED",
@@ -19,29 +23,29 @@ def costs_check(config: Dict) -> Dict:
                             "finding": "no cost model supplied (fee/funding/slippage) - "
                                        "reported PnL is gross; treat as NOT VERIFIED"}],
                 "notes": ["supply config['cost'] with fee/slippage/funding to verify"]}
-    fee = float(cost.get("fee_bps", 0.0))
-    slip = float(cost.get("slippage_bps", 0.0))
-    if fee < 0 or slip < 0:
+
+    # validate the gate fields that exist regardless of trades_log
+    fee = float(cost.get("commission", {}).get("open_rate", 0.0))
+    if fee < 0:
         return {"status": "FAIL",
                 "issues": [{"code": "COST_NEGATIVE", "severity": "P0",
-                            "finding": "cost config contains negative fee/slippage"}],
+                            "finding": "cost config contains a negative commission rate"}],
                 "notes": []}
-    if cost.get("independently_verified"):
-        return {"status": "VERIFIED",
-                "issues": [], "notes": [f"fee {fee} bps/side, slippage {slip} bps - "
-                                        "independently verified"]}
-    return {"status": "DECLARED",
-            "issues": [{"code": "COST_DECLARED", "severity": "P3",
-                        "finding": f"cost assumptions declared: fee {fee} bps/side, "
-                                   f"slippage {slip} bps - independent verification NOT "
-                                   f"PERFORMED (venue schedule/funding/liquidity)"}],
-            "notes": ["declared, not verified - set cost.independently_verified only after "
-                      "an independent re-run"]}
 
+    trades_log = cost.get("trades_log")
+    if not trades_log:
+        return {"status": "DECLARED",
+                "issues": [{"code": "COST_DECLARED", "severity": "P3",
+                            "finding": "cost assumptions declared but per-trade fills "
+                                       "(trades_log) were not supplied - net PnL audit "
+                                       "NOT VERIFIED"}],
+                "notes": ["declared, not net-audited - return trades_log from run() to "
+                          "enable the V3.2 net engine"]}
 
-def mtf_check(config: Dict) -> Dict:
-    return {"status": "NOT VERIFIED",
-            "issues": [{"code": "MTF_MODULE", "severity": "P4",
-                        "finding": "multi-timeframe alignment module is on the roadmap - "
-                                   "MTF leakage not assessed"}],
-            "notes": ["provide aligned MTF frames for the V3 module"]}
+    net = costengine.net_audit(trades_log, cost)
+    return {"status": "VERIFIED", "issues": [],
+            "notes": [f"net PnL {net['net_pnl']:,.2f} vs gross {net['gross_pnl']:,.2f} "
+                      f"(cost drag {net['cost_drag_pct']}%)",
+                      "sub-models: " + ", ".join(f"{k}={v}" for k, v in
+                                                 net["sub_models"].items())],
+            "evidence": {"net": net}}
