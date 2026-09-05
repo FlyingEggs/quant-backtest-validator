@@ -44,12 +44,16 @@ def timeline_audit(trades: List[Dict], min_latency_s: float = 0.0) -> Dict:
         return {"verdict": "NOT VERIFIED",
                 "reason": f"{len(missing)}/{len(trades)} trades lack signal_ts/entry_ts",
                 "violations": []}
-    violations = []
+    violations, unverifiable = [], []
     for i, t in enumerate(trades):
         d = _to_seconds(t["entry_ts"]) - _to_seconds(t["signal_ts"])
-        if not np.isfinite(d):
+        if not np.isfinite(d):                # cannot judge -> never a silent pass
+            unverifiable.append({"trade": i, "signal_ts": str(t["signal_ts"]),
+                                 "entry_ts": str(t["entry_ts"])})
             continue
-        if d <= min_latency_s:                 # fill not strictly after information
+        # min_latency is a floor: entry at signal+latency is legal (d >= latency).
+        # A fill at-or-before the signal instant is always illegal.
+        if (d < min_latency_s) or (d <= 0.0):
             violations.append({"trade": i, "gap_s": round(d, 3),
                                "signal_ts": str(t["signal_ts"]),
                                "entry_ts": str(t["entry_ts"])})
@@ -57,6 +61,10 @@ def timeline_audit(trades: List[Dict], min_latency_s: float = 0.0) -> Dict:
         return {"verdict": "FAIL", "violations": violations,
                 "reason": f"{len(violations)}/{len(trades)} fills at or before their "
                           f"signal time - information used before it was actionable"}
+    if unverifiable:
+        return {"verdict": "NOT VERIFIED", "violations": [],
+                "reason": f"{len(unverifiable)}/{len(trades)} trades have non-finite "
+                          f"timestamps - cannot verify the information boundary"}
     return {"verdict": "PASS", "violations": [],
             "reason": f"{len(trades)} trades: entry strictly after signal "
                       f"(min latency {min_latency_s}s)"}

@@ -113,7 +113,7 @@ def net_audit(trades_log: List[Dict], cfg: Dict) -> Dict:
 
     for tr in trades_log:
         side = tr.get("side", "long")
-        qty = float(tr.get("qty", tr.get("contracts", 1.0)))
+        qty = abs(float(tr.get("qty", tr.get("contracts", 1.0))))   # never improve via sign
         ep, xp = float(tr["entry_price"]), float(tr["exit_price"])
         direction = 1.0 if side in ("long", "buy") else -1.0
         gross += (xp - ep) * direction * qty
