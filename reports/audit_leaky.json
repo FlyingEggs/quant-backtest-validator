@@ -1,5 +1,5 @@
 {
-  "engine_version": "2.2.0",
+  "engine_version": "3.4.2",
   "strategy": "same-bar confirmation fill",
   "scope": [
     "Data Integrity",
@@ -12,16 +12,17 @@
   ],
   "overall": "FAIL",
   "audit_complete": false,
-  "verified_score": 8,
-  "reliability_score": 8,
+  "verified_score": 33,
+  "reliability_score": 33,
   "coverage_pct": 71,
   "not_verified": [
     "Costs",
     "MTF"
   ],
+  "declared": [],
   "blocking": {
-    "P0": 2,
-    "P1": 0,
+    "P0": 1,
+    "P1": 1,
     "P2": 2
   },
   "statistical_confidence": {
@@ -62,13 +63,14 @@
         },
         {
           "code": "EXECUTION_FILL",
-          "severity": "P0",
-          "finding": "fill-timing pnl 17,319,566 -> 23 after +1 bar fill shift (retains 0.0%) - perturbation evidence; corroborate with an execution model before declaring look-ahead"
+          "severity": "P1",
+          "finding": "fill-timing pnl 17,319,566 -> 23 after +1 bar fill shift (retains 0.0%) - perturbation evidence; consistent with same-bar fills OR a legitimate short holding horizon - corroborate with entry semantics and the per-trade timeline before declaring look-ahead"
         }
       ],
       "notes": [
         "entry semantics not next_open",
-        "fill perturbation=FAIL, price_cols=['open']"
+        "fill perturbation=FAIL, price_cols=['open']",
+        "information-boundary timeline NOT VERIFIED - strategy returned no per-trade signal_ts/entry_ts records (perturbation test still ran)"
       ]
     },
     "Statistics": {
@@ -139,11 +141,11 @@
         {
           "code": "MTF_MODULE",
           "severity": "P4",
-          "finding": "multi-timeframe alignment module is on the roadmap - MTF leakage not assessed"
+          "finding": "no MTF binding supplied (config['mtf'] + DataSpec.timeframes) - temporal availability not assessed"
         }
       ],
       "notes": [
-        "provide aligned MTF frames for the V3 module"
+        "supply config['mtf'] and higher-timeframe frames to verify"
       ]
     }
   },
@@ -156,8 +158,8 @@
     },
     {
       "code": "EXECUTION_FILL",
-      "severity": "P0",
-      "finding": "fill-timing pnl 17,319,566 -> 23 after +1 bar fill shift (retains 0.0%) - perturbation evidence; corroborate with an execution model before declaring look-ahead",
+      "severity": "P1",
+      "finding": "fill-timing pnl 17,319,566 -> 23 after +1 bar fill shift (retains 0.0%) - perturbation evidence; consistent with same-bar fills OR a legitimate short holding horizon - corroborate with entry semantics and the per-trade timeline before declaring look-ahead",
       "section": "Execution"
     },
     {
@@ -187,7 +189,7 @@
     {
       "code": "MTF_MODULE",
       "severity": "P4",
-      "finding": "multi-timeframe alignment module is on the roadmap - MTF leakage not assessed",
+      "finding": "no MTF binding supplied (config['mtf'] + DataSpec.timeframes) - temporal availability not assessed",
       "section": "MTF"
     }
   ],

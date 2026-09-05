@@ -63,6 +63,12 @@ INDEP_V = ("INDEPENDENT", "AUTOCORRELATED", "INSUFFICIENT")
 AUDIT_V = ("PASS", "CONDITIONAL PASS", "FAIL", "INSUFFICIENT")
 
 
+# Lazy scipy singleton: None until resolved. `_SCIPY_CHI2_TRIED` makes a failed
+# import permanent (no retry per call); on success the callable is cached.
+_SCIPY_CHI2_SF: Optional[Callable[[float, int], float]] = None
+_SCIPY_CHI2_TRIED = False
+
+
 def _chi2_sf(x: float, df: int) -> float:
     """chi2 survival P(X > x).
 
@@ -71,22 +77,20 @@ def _chi2_sf(x: float, df: int) -> float:
     quality of a normal approximation in small-df tails, so scipy is preferred when
     present; dependency-light environments keep working via the fallback.
     """
-    global _SCIPY_CHI2_SF
-    if _SCIPY_CHI2_SF is None:
+    global _SCIPY_CHI2_SF, _SCIPY_CHI2_TRIED
+    if not _SCIPY_CHI2_TRIED:
+        _SCIPY_CHI2_TRIED = True
         try:
-            from scipy import stats as _stats
+            from scipy import stats as _stats  # type: ignore[import-untyped]
             _SCIPY_CHI2_SF = _stats.chi2.sf
         except Exception:
-            _SCIPY_CHI2_SF = False
-    if _SCIPY_CHI2_SF is not False:
+            _SCIPY_CHI2_SF = None
+    if _SCIPY_CHI2_SF is not None:
         return float(_SCIPY_CHI2_SF(float(x), int(df)))
     if x <= 0.0:
         return 1.0
     z = ((x / df) ** (1.0 / 3.0) - (1.0 - 2.0 / (9.0 * df))) / math.sqrt(2.0 / (9.0 * df))
     return 0.5 * math.erfc(z / math.sqrt(2.0))
-
-
-_SCIPY_CHI2_SF = None  # lazily resolved: None=unknown, False=unavailable, callable=ready
 
 
 def _pnl(res: Dict) -> float:

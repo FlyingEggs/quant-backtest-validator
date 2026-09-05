@@ -14,6 +14,7 @@ PASS can never mask weak significance.
 
 from __future__ import annotations
 
+import textwrap
 from typing import Dict, List
 
 WEIGHTS = {"P0": 40, "P1": 15, "P2": 5, "P3": 2, "P4": 0}
@@ -122,6 +123,27 @@ def assemble_report(strategy_name: str, sections: Dict[str, Dict], config: Dict,
     }
 
 
+def _interpretation(rep: Dict) -> str:
+    """One human-readable line under the verdict: PASS is scoped, not a guarantee.
+
+    PASS means "no cheating evidence in the dimensions we actually checked" - the
+    report must say so at the top, because clients read the verdict first and the
+    scope caveat second.
+    """
+    overall = rep["overall"]
+    if overall == "FAIL":
+        return ("A blocking defect was found in the checked scope - do not deploy "
+                "on this evidence.")
+    if overall == "CONDITIONAL PASS":
+        return ("No hard defect, but P1 findings need manual confirmation before "
+                "the reported performance is relied on.")
+    if overall == "INCOMPLETE":
+        return ("No defect in the verified scope, but key dimensions were not "
+                "verified - missing evidence is not a clean bill.")
+    return ("No evidence of cheating was found in the checked dimensions. Audit "
+            "is not a guarantee of live performance - see Limitations.")
+
+
 def audit_report_text(report: Dict) -> str:
     L = []
     L.append("=" * 60)
@@ -130,6 +152,10 @@ def audit_report_text(report: Dict) -> str:
     L.append(f"Engine   : {report['engine_version']}")
     L.append("=" * 60)
     L.append(f"Overall Verdict : {report['overall']}")
+    interp = textwrap.wrap(_interpretation(report), width=62)
+    L.append(f"Interpretation  : {interp[0]}" if interp else "Interpretation  :")
+    for more in interp[1:]:
+        L.append(f"                  {more}")
     L.append(f"Verified Score  : {report['verified_score']}/100 "
              f"(over VERIFIED scope only)")
     L.append(f"Audit Coverage  : {report['coverage_pct']}%")

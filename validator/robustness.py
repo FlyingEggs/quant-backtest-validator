@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Dict, List
+from typing import Any, Dict, List
 
 import numpy as np
 import pandas as pd
@@ -159,7 +159,7 @@ def check(strategy: Strategy, df: pd.DataFrame, spec: DataSpec, config: Dict) ->
 
     status = "FAIL" if any(i["severity"] == "P0" for i in issues) else \
              ("CONDITIONAL PASS" if any(i["severity"] == "P1" for i in issues) else "PASS")
-    out = {"status": status, "issues": issues, "notes": notes}
+    out: Dict[str, Any] = {"status": status, "issues": issues, "notes": notes}
     if evidence:
         out["evidence"] = evidence
     return out

@@ -1,5 +1,5 @@
 {
-  "engine_version": "2.2.0",
+  "engine_version": "3.4.2",
   "strategy": "EMA-trend (next-open, hold 5)",
   "scope": [
     "Data Integrity",
@@ -12,12 +12,13 @@
   ],
   "overall": "INCOMPLETE",
   "audit_complete": false,
-  "verified_score": 91,
-  "reliability_score": 91,
+  "verified_score": 93,
+  "reliability_score": 93,
   "coverage_pct": 86,
   "not_verified": [
     "MTF"
   ],
+  "declared": [],
   "blocking": {
     "P0": 0,
     "P1": 0,
@@ -55,7 +56,8 @@
       "status": "PASS",
       "issues": [],
       "notes": [
-        "fill perturbation=PASS, price_cols=['open']"
+        "fill perturbation=PASS, price_cols=['open']",
+        "information-boundary timeline=PASS (297 trades: entry strictly after signal (min latency 0.0s))"
       ]
     },
     "Statistics": {
@@ -98,17 +100,71 @@
       ]
     },
     "Costs": {
-      "status": "DECLARED",
-      "issues": [
-        {
-          "code": "COST_DECLARED",
-          "severity": "P3",
-          "finding": "cost assumptions declared: fee 4.0 bps/side, slippage 2.0 bps - independent verification NOT PERFORMED (venue schedule/funding/liquidity)"
-        }
-      ],
+      "status": "VERIFIED",
+      "issues": [],
       "notes": [
-        "declared, not verified - set cost.independently_verified only after an independent re-run"
-      ]
+        "net PnL 48,883.82 vs gross 48,883.82 (cost drag 0.0%)",
+        "sub-models: commission=NOT VERIFIED, spread=NOT VERIFIED, slippage=NOT VERIFIED, tick_size=NOT VERIFIED, market_impact=NOT VERIFIED, financing=NOT VERIFIED"
+      ],
+      "evidence": {
+        "net": {
+          "verdict": "VERIFIED",
+          "gross_pnl": 48883.82028957915,
+          "net_pnl": 48883.82028957915,
+          "cost_drag_pct": 0.0,
+          "total_cost": 0.0,
+          "table": [
+            [
+              "Gross PnL",
+              48883.8203,
+              true
+            ],
+            [
+              "Tick size",
+              -0.0,
+              false
+            ],
+            [
+              "Spread",
+              -0.0,
+              false
+            ],
+            [
+              "Slippage",
+              -0.0,
+              false
+            ],
+            [
+              "Market Impact",
+              -0.0,
+              false
+            ],
+            [
+              "Commission",
+              -0.0,
+              false
+            ],
+            [
+              "Financing",
+              -0.0,
+              false
+            ],
+            [
+              "Net PnL",
+              48883.8203,
+              true
+            ]
+          ],
+          "sub_models": {
+            "commission": "NOT VERIFIED",
+            "spread": "NOT VERIFIED",
+            "slippage": "NOT VERIFIED",
+            "tick_size": "NOT VERIFIED",
+            "market_impact": "NOT VERIFIED",
+            "financing": "NOT VERIFIED"
+          }
+        }
+      }
     },
     "MTF": {
       "status": "NOT VERIFIED",
@@ -116,11 +172,11 @@
         {
           "code": "MTF_MODULE",
           "severity": "P4",
-          "finding": "multi-timeframe alignment module is on the roadmap - MTF leakage not assessed"
+          "finding": "no MTF binding supplied (config['mtf'] + DataSpec.timeframes) - temporal availability not assessed"
         }
       ],
       "notes": [
-        "provide aligned MTF frames for the V3 module"
+        "supply config['mtf'] and higher-timeframe frames to verify"
       ]
     }
   },
@@ -138,19 +194,13 @@
       "section": "Look-ahead"
     },
     {
-      "code": "COST_DECLARED",
-      "severity": "P3",
-      "finding": "cost assumptions declared: fee 4.0 bps/side, slippage 2.0 bps - independent verification NOT PERFORMED (venue schedule/funding/liquidity)",
-      "section": "Costs"
-    },
-    {
       "code": "MTF_MODULE",
       "severity": "P4",
-      "finding": "multi-timeframe alignment module is on the roadmap - MTF leakage not assessed",
+      "finding": "no MTF binding supplied (config['mtf'] + DataSpec.timeframes) - temporal availability not assessed",
       "section": "MTF"
     }
   ],
-  "recommendation": "No blocking findings in the VERIFIED scope, but the audit is INCOMPLETE (coverage 86%; NOT VERIFIED: MTF). PASS is only granted when every scope item is verified - complete the scope before treating this as a clean bill.",
+  "recommendation": "No blocking findings in the VERIFIED scope, but the audit is INCOMPLETE (coverage 86%; NOT VERIFIED: MTF). PASS is only granted when every scope item is VERIFIED (DECLARED != VERIFIED) - complete the scope before treating this as a clean bill.",
   "config_summary": {
     "seed": 11,
     "n_shuffles": 200,

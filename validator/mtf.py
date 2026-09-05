@@ -36,7 +36,12 @@ def _transform_high(high_value: pd.Series, transform) -> pd.Series:
     if transform is None or transform == "identity":
         return high_value
     if transform == "sign_diff":
-        return np.sign(high_value.diff()).fillna(0.0)
+        # sign of the diff with NaN (missing close) -> 0. Compute on the ndarray
+        # (numpy ufuncs on a Series return ndarray; on the ndarray everything is
+        # typed) then rebuild the Series so index/alignment survive.
+        sign = np.sign(high_value.diff().to_numpy())
+        return pd.Series(np.where(np.isnan(sign), 0.0, sign),
+                         index=high_value.index)
     if callable(transform):
         return transform(high_value)
     raise ValueError(f"unknown mtf transform: {transform!r}")

@@ -1,5 +1,10 @@
 # quant-backtest-validator
 
+[![CI](https://github.com/FlyingEggs/quant-backtest-validator/actions/workflows/ci.yml/badge.svg)](https://github.com/FlyingEggs/quant-backtest-validator/actions/workflows/ci.yml)
+<!-- Codecov badge: link the repo at codecov.io and uncomment.
+[![codecov](https://codecov.io/gh/FlyingEggs/quant-backtest-validator/branch/main/graph/badge.svg)](https://codecov.io/gh/FlyingEggs/quant-backtest-validator)
+-->
+
 **Can this strategy backtest be trusted? — a one-call audit engine.**
 
 A dependency-light audit framework (Python ≥ 3.9, numpy + pandas only, MIT) that separates
@@ -17,7 +22,7 @@ print(audit_text(strategy, df, ...))
 ```bash
 python3 examples/audit_demo.py                   # two full client-style reports -> ./reports/
 python3 examples/demo.py                         # six mechanistic archetypes (primitives)
-python3 -m unittest discover -s tests -v         # 130 unit tests (adversarial + V3 engines)
+python3 -m unittest discover -s tests -v         # 137 unit tests (adversarial + V3 engines)
 ```
 
 ## What it is (and is not)
@@ -48,7 +53,7 @@ quant-backtest-validator/
 │   ├── audit.py           # audit() / audit_text() entry points
 │   └── types.py           # Strategy / DataSpec contracts
 ├── examples/  (audit_demo.py, demo.py)
-├── tests/     (130 unit tests)
+├── tests/     (137 unit tests)
 └── reports/   (sample JSON reports produced by audit_demo.py)
 ```
 
@@ -99,6 +104,11 @@ wrong anywhere"*. Un-checked capability is `INCOMPLETE`, reported separately fro
 findings. `config['scope']` narrows the declared scope (a scoped audit must state its scope;
 PASS is only meaningful within it).
 
+> ⚠️ **PASS ≠ green light for production.** PASS means *no violation detected in the scopes
+> we checked*, not *"this strategy will definitely work live"*. Since V3.4.2 every report
+> carries an `Interpretation:` line directly under the verdict that says exactly this — read
+> the verdict and the interpretation together.
+
 Statistical confidence is reported separately so a PASS can never mask weak significance:
 `Significance: DISCOUNTED (N_eff 54/297, ratio 0.18) — verdict ≠ significance verdict`.
 Costs: no config ⇒ `NOT VERIFIED` · config ⇒ `DECLARED` · `independently_verified: true` ⇒
@@ -108,16 +118,35 @@ Costs: no config ⇒ `NOT VERIFIED` · config ⇒ `DECLARED` · `independently_v
 
 ```
 QUANT BACKTEST VALIDATION REPORT
-Strategy : EMA-trend (next-open, hold 5)        Engine : 2.2.0
-Overall Verdict : INCOMPLETE        (MTF on the roadmap - not a clean bill)
-Verified Score  : 91/100 (over VERIFIED scope only)
+Strategy : EMA-trend (next-open, hold 5)
+Engine   : 3.4.2
+============================================================
+Overall Verdict : INCOMPLETE
+Interpretation  : No defect in the verified scope, but key dimensions were not
+                  verified - missing evidence is not a clean bill.
+Verified Score  : 93/100 (over VERIFIED scope only)
 Audit Coverage  : 86%
 Blocking        : P0=0  P1=0  P2=1
-Significance    : DISCOUNTED (N_eff 54.4/297, ratio 0.18)
-AUDIT SCOPE     ✓ Data Integrity · ✓ Look-ahead · ✓ Execution ·
-                ✓ Statistics (CONDITIONAL) · ✓ Robustness · ✓ Costs (DECLARED) · △ MTF
-Findings: [P2] STAT_DEPENDENCE · [P3] expansion confirmed · [P3] costs declared
-Recommendation: no blocking in VERIFIED scope, but INCOMPLETE - complete scope for PASS.
+Significance    : DISCOUNTED (N_eff 54.4 / 297, ratio 0.18) - verdict != significance verdict
+------------------------------------------------------------
+AUDIT SCOPE
+  ✓ Data Integrity   PASS
+  ✓ Look-ahead       PASS
+  ✓ Execution        PASS
+  ✓ Statistics       CONDITIONAL PASS
+  ✓ Robustness       PASS
+  ✓ Costs            VERIFIED
+  △ MTF              NOT VERIFIED
+------------------------------------------------------------
+Findings (severity-ordered):
+  [P2] (Statistics) STAT_DEPENDENCE: heavy return dependence: N_eff/n=0.18 ...
+  [P3] (Look-ahead) PERIOD_EXPANSION_CONFIRMED: expansion SUSPECT resolved by ...
+  [P4] (MTF) MTF_MODULE: no MTF binding supplied ...
+------------------------------------------------------------
+Recommendation: No blocking findings in the VERIFIED scope, but the audit is
+INCOMPLETE (coverage 86%; NOT VERIFIED: MTF). PASS is only granted when every
+scope item is VERIFIED (DECLARED != VERIFIED) - complete the scope first.
+============================================================
 ```
 
 With MTF declared out of scope (and costs supplied), the same strategy audits to genuine
@@ -248,6 +277,29 @@ Activated by `config["surface"] = {"x","y","x_values","y_values"}`. On a 2D pnl 
   **TRADE_CLUSTERING (P3)** block dependence (not iid samples). Timestamps are
   normalised like the execution timeline (epoch ns/ms/s ints, datetime, ISO strings).
 
+## Performance
+
+Measured on a 2015 MacBook Pro (Intel Core i5-5350U @ 1.80 GHz), Python 3.9,
+`audit()` over the full default scope. Reproduce with:
+
+```bash
+RUN_BENCHMARK=1 python3 -m unittest tests.test_benchmark -v        # daily + 5-min
+RUN_BENCHMARK=1 BENCH_BIG=1 python3 -m unittest tests.test_benchmark -v   # + minute
+```
+
+| Dataset | Bars | RC shuffles | Wall time |
+|---------|------|-------------|-----------|
+| 5 years daily | 1,260 | 200 | **2.8 s** |
+| 10 years daily | 2,520 | 200 | **13.1 s** |
+| 1 year 5-min | 105,120 | 200 | **238.7 s** |
+| 1 year minute | 525,600 | 50 | **333.9 s** |
+
+*Randomization Control dominates: each shuffle reruns the full strategy backtest, so
+wall time scales ~linearly with `n_shuffles` and with the strategy loop's row cost.
+The numbers above use the pure-Python demo strategy (`next_open_hold`); a vectorised
+backtest scales far better. RC=200 on 500k+ rows with a Python-loop strategy is the
+one case to budget for — drop `n_shuffles` or vectorise, don't silently skip RC.*
+
 ## Roadmap (open items, by design)
 
 | Module | Status |
@@ -258,6 +310,14 @@ Activated by `config["surface"] = {"x","y","x_values","y_values"}`. On a 2D pnl 
 | Intrabar execution model (partial fills, queue) | roadmap |
 | OOS / Walk-Forward contract (V3.3) | ✅ boundary policy + parameter freeze + multi-window WF |
 | Parameter surface (V3.4) | ✅ 2D plateau/island/ridge + trade clustering |
+| CI / lint (V3.4.2) | ✅ GitHub Actions: unittest matrix 3.9–3.12 + coverage artifact + `mypy validator/` baseline clean (see `mypy.ini`) |
+| Full `mypy --strict` cleanup | roadmap — needs report-container TypedDicts across the engine (heterogeneous report dicts currently use `Dict[str, Any]` deliberately) |
+
+## Who's Using This
+
+<!-- If you use quant-backtest-validator in your workflow and it helped you catch a
+     look-ahead bug or an overstated backtest, open an issue/PR to be featured here. -->
+_None yet — this section is a placeholder. First case study in progress._
 
 ## Honesty notes
 

@@ -21,7 +21,7 @@ Three machine contracts:
 
 from __future__ import annotations
 
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 import numpy as np
 import pandas as pd
@@ -94,8 +94,8 @@ def _sum_pnl(trades: List[Dict]) -> Dict:
 def parameter_freeze_audit(strategy: Strategy, df: pd.DataFrame,
                            config: Dict) -> Dict:
     """Determinism + contamination probes over the OOS material."""
-    out = {"determinism": "NOT VERIFIED", "refit_probe": "NOT VERIFIED",
-           "issues": []}
+    out: Dict[str, Any] = {"determinism": "NOT VERIFIED", "refit_probe": "NOT VERIFIED",
+                           "issues": []}
     probe_params: List[Dict] = []
     default = dict(strategy.default_params or {})
     probe_params.append(default)

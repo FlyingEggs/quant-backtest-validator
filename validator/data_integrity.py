@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Dict
+from typing import Dict, List
 
 import numpy as np
 import pandas as pd
@@ -11,7 +11,8 @@ REQUIRED_COLS = ("open", "high", "low", "close")
 
 
 def check(df: pd.DataFrame, spec=None) -> Dict:
-    issues, notes = [], []
+    issues: List[Dict] = []
+    notes: List[str] = []
     if not isinstance(df.index, pd.DatetimeIndex):
         issues.append({"code": "DATA_INDEX", "severity": "P0",
                        "finding": "index is not a DatetimeIndex - bar alignment cannot be trusted"})
