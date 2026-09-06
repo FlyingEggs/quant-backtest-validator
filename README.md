@@ -337,6 +337,10 @@ one case to budget for — drop `n_shuffles` or vectorise, don't silently skip R
 | Parameter surface (V3.4) | ✅ 2D plateau/island/ridge + trade clustering |
 | CI / lint (V3.4.2) | ✅ GitHub Actions: unittest matrix 3.9–3.12 + coverage artifact + `mypy validator/` baseline clean (see `mypy.ini`) |
 | Full `mypy --strict` cleanup | roadmap — needs report-container TypedDicts across the engine (heterogeneous report dicts currently use `Dict[str, Any]` deliberately) |
+| Instrument realism (V3.6) | **planned** — `DataSpec` qty_step/min_qty/min_notional/contract_size; EXEC_QTY_STEP/EXEC_MIN_QTY/EXEC_MIN_NOTIONAL; volume-aware impact (`volume_linear`); partial-fill/queue declared NOT VERIFIED (intrabar engine stays roadmap) |
+| Parameter provenance (V3.7) | **planned** — `Strategy.fit_is` + `accepts_frozen` contract; frozen-vs-adversarial injection probe → PARAM_PROVENANCE P0 on hidden refit; frozen_hash into OOS evidence |
+| Certification contract (V3.8) | **planned** — audit_id / generated_at / strategy_hash / data_hash anchors; L0-L4 certification level over sections (L5 adversarial suite, L6 live parity, L7 signed immutable audits: engine max L4, higher levels are product roadmap) |
+| Statistical significance certification (V3.9+) | **planned** — multiple-testing correction · White's Reality Check / SPA · Deflated & Probabilistic Sharpe Ratio · regime/bootstrap block dependence (own workstream before implementation) |
 
 ## Who's Using This
 
