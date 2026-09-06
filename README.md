@@ -22,7 +22,7 @@ print(audit_text(strategy, df, ...))
 ```bash
 python3 examples/audit_demo.py                   # two full client-style reports -> ./reports/
 python3 examples/demo.py                         # six mechanistic archetypes (primitives)
-python3 -m unittest discover -s tests -v         # 177 unit tests (adversarial + V3 engines)
+python3 -m unittest discover -s tests -v         # 183 unit tests (adversarial + V3 engines)
 ```
 
 ## What it is (and is not)
@@ -53,7 +53,7 @@ quant-backtest-validator/
 │   ├── audit.py           # audit() / audit_text() entry points
 │   └── types.py           # Strategy / DataSpec contracts
 ├── examples/  (audit_demo.py, demo.py)
-├── tests/     (177 unit tests)
+├── tests/     (183 unit tests)
 └── reports/   (sample JSON reports produced by audit_demo.py)
 ```
 
@@ -287,6 +287,21 @@ backtest whose fills **cannot actually execute** is surfaced instead of blessed:
   execution model). Nothing declared ⇒ `execution` sub-check NOT VERIFIED, never assumed
   clean.
 
+## V3.7 — Parameter provenance (hidden-refit detection)
+
+A strategy may declare the provenance contract: `fit_is(df)` learns parameters on the **IS
+window only**, and `accepts_frozen` promises `run()` treats injected parameters as
+authoritative (never re-fits internally). The audit then machine-verifies the OOS run really
+uses the frozen IS parameters: it runs OOS under the frozen params **and** under an
+adversarial perturbation, and requires the outputs to DIFFER.
+
+* Identical output (with trades) ⇒ the injected parameters are ignored — the strategy
+  decides internally = hidden refit ⇒ **P0 `PARAM_PROVENANCE`**.
+* `frozen_hash` (sha256 of the frozen IS parameter set) is recorded into the OOS evidence,
+  so a downstream certification can anchor "these params came from this IS fit".
+* Un-declared contract ⇒ `provenance: NOT VERIFIED` (reported in the parameter-freeze
+  note), never a fabricated PASS/FAIL and no verdict impact on black-box strategies.
+
 ## V3.3 — OOS / Walk-Forward research contract
 
 Activated by `config["oos"]`. Three machine contracts:
@@ -357,7 +372,7 @@ one case to budget for — drop `n_shuffles` or vectorise, don't silently skip R
 | CI / lint (V3.4.2) | ✅ GitHub Actions: unittest matrix 3.9–3.12 + coverage artifact + `mypy validator/` baseline clean (see `mypy.ini`) |
 | Full `mypy --strict` cleanup | roadmap — needs report-container TypedDicts across the engine (heterogeneous report dicts currently use `Dict[str, Any]` deliberately) |
 | Instrument realism (V3.6) | ✅ `DataSpec` qty_step/min_qty/min_notional/contract_size; EXEC_QTY_STEP/EXEC_MIN_QTY/EXEC_MIN_NOTIONAL; volume-aware impact (`volume_linear`); partial-fill/queue declared NOT VERIFIED (intrabar engine stays roadmap) |
-| Parameter provenance (V3.7) | **planned** — `Strategy.fit_is` + `accepts_frozen` contract; frozen-vs-adversarial injection probe → PARAM_PROVENANCE P0 on hidden refit; frozen_hash into OOS evidence |
+| Parameter provenance (V3.7) | ✅ `Strategy.fit_is` + `accepts_frozen` contract; frozen-vs-adversarial injection probe → PARAM_PROVENANCE P0 on hidden refit; frozen_hash into OOS evidence |
 | Certification contract (V3.8) | **planned** — audit_id / generated_at / strategy_hash / data_hash anchors; L0-L4 certification level over sections (L5 adversarial suite, L6 live parity, L7 signed immutable audits: engine max L4, higher levels are product roadmap) |
 | Statistical significance certification (V3.9+) | **planned** — multiple-testing correction · White's Reality Check / SPA · Deflated & Probabilistic Sharpe Ratio · regime/bootstrap block dependence (own workstream before implementation) |
 

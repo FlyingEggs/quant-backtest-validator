@@ -154,7 +154,8 @@ def check(strategy: Strategy, df: pd.DataFrame, spec: DataSpec, config: Dict) ->
                      f"{wf_rep['expectancy_consistency_pct'] if wf_rep['expectancy_consistency_pct'] is not None else 'n/a'}, "
                      f"trade-adequacy {wf_rep['trade_adequacy_pct']:.0%}")
         notes.append(f"parameter freeze: determinism={pf['determinism']}, "
-                     f"refit-probe={pf['refit_probe']}")
+                     f"refit-probe={pf['refit_probe']}, "
+                     f"provenance={pf.get('provenance', 'NOT VERIFIED')}")
         evidence.update({"wf": wf_rep, "param_freeze": pf})
 
     status = "FAIL" if any(i["severity"] == "P0" for i in issues) else \

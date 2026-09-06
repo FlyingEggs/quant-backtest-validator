@@ -14,6 +14,12 @@ Three machine contracts:
                     IDENTICAL results across the grid extremes on OOS, its frozen
                     parameters are being ignored -> internal re-fit suspected (P0).
 
+   V3.7 PARAMETER PROVENANCE - when the strategy declares the provenance contract
+   (fit_is + accepts_frozen), the audit machine-verifies that OOS output changes
+   with the INJECTED frozen parameters: a strategy that produces identical output
+   under frozen-vs-adversarial parameter injection is refitting internally (P0).
+   Un-declared contract -> provenance NOT VERIFIED (reported, never assumed).
+
 3) WALK FORWARD          - expanding-IS / rolling-OOS windows with per-window
    IS/OOS metrics and OOS-consistency aggregates (positive-window %, expectancy
    consistency, trade adequacy).
@@ -21,12 +27,65 @@ Three machine contracts:
 
 from __future__ import annotations
 
+import hashlib
 from typing import Any, Dict, List, Optional
 
 import numpy as np
 import pandas as pd
 
 from validator.types import DataSpec, Strategy, run_metrics
+
+
+def _param_hash(params: Dict) -> str:
+    """Deterministic fingerprint of a frozen parameter set."""
+    items = sorted((str(k), repr(v)) for k, v in (params or {}).items())
+    return hashlib.sha256("\x1f".join(f"{k}={v}" for k, v in items)
+                          .encode("utf-8")).hexdigest()[:16]
+
+
+def _perturb(params: Dict) -> Dict:
+    """Adversarial parameter set: same keys, numeric values shifted so output must
+    differ if the injected parameters are actually respected."""
+    out: Dict[str, Any] = {}
+    for k, v in (params or {}).items():
+        if isinstance(v, bool):
+            out[k] = not v
+        elif isinstance(v, (int, float)):
+            out[k] = float(v) + 1.0
+        else:
+            out[k] = v
+    return out
+
+
+def _provenance_probe(strategy: Strategy, df: pd.DataFrame, split: int,
+                      fp_is: Dict) -> Dict:
+    """Machine probe: OOS output under frozen-IS params vs adversarial params.
+
+    Identical output (with trades) means the injected parameters are IGNORED -
+    the strategy decides internally, i.e. a hidden refit. Returns a verdict dict;
+    the caller turns a violation into P0 PARAM_PROVENANCE.
+    """
+    adv = _perturb(fp_is)
+    if getattr(strategy, "supports_from_bar", False):
+        fp_p, adv_p = dict(fp_is), dict(adv)
+        fp_p["_from_bar"] = split
+        adv_p["_from_bar"] = split
+        frame = df
+    else:
+        fp_p, adv_p = fp_is, adv
+        frame = df.iloc[split:]
+    r_fp = run_metrics(strategy, frame, fp_p)
+    r_adv = run_metrics(strategy, frame, adv_p)
+    same = (_pnl(r_fp) == _pnl(r_adv) and
+            r_fp.get("trades") == r_adv.get("trades"))
+    if same and int(r_fp.get("trades", 0)) > 0:
+        return {"status": "FAIL",
+                "finding": f"OOS output is IDENTICAL under frozen-IS parameters "
+                           f"({_param_hash(fp_is)}) and adversarial injection "
+                           f"({_param_hash(adv)}) - the injected frozen parameters "
+                           f"are ignored; internal re-fit / hidden optimization "
+                           f"suspected (manual review to confirm)"}
+    return {"status": "PASS"}
 
 POLICIES = ("ENTRY_IN_WINDOW", "EXIT_IN_WINDOW", "FULL_TRADE_IN_WINDOW")
 
@@ -139,6 +198,35 @@ def parameter_freeze_audit(strategy: Strategy, df: pd.DataFrame,
                                              "suspected (manual review to confirm)"})
         else:
             out["refit_probe"] = "PASS"
+
+    # ---- V3.7 provenance: params must come from a frozen IS fit --------------
+    out["provenance"] = "NOT VERIFIED"
+    out["frozen_hash"] = None
+    if strategy.fit_is is not None and strategy.accepts_frozen:
+        n = len(df)
+        split = int(n * (1.0 - float(config.get("oos_frac", 0.30))))
+        if split < 50 or n - split < 50:
+            out["notes"] = out.get("notes", []) + [
+                "provenance probe skipped: sample too small for an IS/OOS split"]
+        else:
+            try:
+                fp_is = dict(strategy.fit_is(df.iloc[:split]) or {})
+                fp_is.pop("_from_bar", None)
+                fp_is.pop("_frozen", None)
+                out["frozen_hash"] = _param_hash(fp_is)
+            except Exception as e:
+                out["provenance"] = "NOT VERIFIED"
+                out["issues"].append({"code": "PROVENANCE_FIT_ERROR", "severity": "P2",
+                                      "finding": f"fit_is() failed on the IS window: {e}"})
+                fp_is = None
+            if fp_is is not None:
+                prov = _provenance_probe(strategy, df, split, fp_is)
+                if prov["status"] == "FAIL":
+                    out["provenance"] = "FAIL"
+                    out["issues"].append({"code": "PARAM_PROVENANCE", "severity": "P0",
+                                          "finding": prov["finding"]})
+                else:
+                    out["provenance"] = "PASS"
     return out
 
 

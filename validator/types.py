@@ -31,6 +31,13 @@ class Strategy:
     # bt_mechanism: pure bt(df) over a frame that carries signal_col (v1-style)
     signal_col: Optional[str] = None
     bt_mechanism: Optional[BtFn] = None
+    # ---- V3.7 parameter-provenance contract ----------------------------------
+    # Declare BOTH to get OOS parameter provenance verified:
+    #   fit_is(df)      -> params learned on the IS window ONLY (pure, stateless)
+    #   accepts_frozen  -> run(df, params) treats reserved '_frozen' params as
+    #                      authoritative and NEVER re-fits internally
+    fit_is: Optional[Callable[[pd.DataFrame], Dict]] = None
+    accepts_frozen: bool = False
 
 
 @dataclass
@@ -57,7 +64,8 @@ class DataSpec:
 
 def as_strategy(name: str, run_df: Callable[[pd.DataFrame], Dict],
                 entry_semantics: str = "next_open",
-                description: str = "", supports_from_bar: bool = False) -> Strategy:
+                description: str = "", supports_from_bar: bool = False,
+                fit_is=None, accepts_frozen: bool = False) -> Strategy:
     """Adapt a plain run(df)->metrics function into a black-box Strategy.
 
     Parameter sensitivity is only meaningful when run(df, params) and a param_grid
@@ -66,13 +74,15 @@ def as_strategy(name: str, run_df: Callable[[pd.DataFrame], Dict],
     def _run(df: pd.DataFrame, params: dict) -> Dict:
         return run_df(df)
     return Strategy(name=name, run=_run, entry_semantics=entry_semantics,
-                    description=description, supports_from_bar=supports_from_bar)
+                    description=description, supports_from_bar=supports_from_bar,
+                    fit_is=fit_is, accepts_frozen=accepts_frozen)
 
 
 def as_code_strategy(name: str, df: pd.DataFrame, signal_col: str,
                      bt: BtFn, run_df=None,
                      entry_semantics: str = "next_open",
-                     description: str = "") -> Strategy:
+                     description: str = "",
+                     fit_is=None, accepts_frozen: bool = False) -> Strategy:
     """Strategy from code-level artefacts: a signal column + its backtest fn.
 
     Enables the full mechanism suite (lag, expansion, randomized control) in
@@ -86,7 +96,8 @@ def as_code_strategy(name: str, df: pd.DataFrame, signal_col: str,
         run_fn = run_df
     return Strategy(name=name, run=run_fn, entry_semantics=entry_semantics,
                     description=description, signal_col=signal_col,
-                    bt_mechanism=bt)
+                    bt_mechanism=bt, fit_is=fit_is,
+                    accepts_frozen=accepts_frozen)
 
 
 def default_config(**overrides) -> Dict:

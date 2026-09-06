@@ -20,7 +20,7 @@ from validator import (data_integrity, execution, lookahead, statistics,
 from validator import report as report_mod
 from validator.types import DataSpec, Strategy, default_config
 
-ENGINE_VERSION = "3.6.0"
+ENGINE_VERSION = "3.7.0"
 
 ALL_SECTIONS = ["Data Integrity", "Look-ahead", "Execution", "Statistics",
                 "Robustness", "Costs", "MTF"]
