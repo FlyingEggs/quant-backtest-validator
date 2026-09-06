@@ -100,7 +100,8 @@ def _shift_amount(cfg: dict, key: str, price: float, qty: float) -> float:
     raise ValueError(f"unknown {key} mode {mode!r}")
 
 
-def _impact_shift(cfg: dict, price: float, qty: float, action: str) -> float:
+def _impact_shift(cfg: dict, price: float, qty: float, action: str,
+                  vol: Optional[float] = None) -> float:
     if not cfg or cfg.get("mode", "none") == "none":
         return 0.0
     mode = cfg.get("mode")
@@ -111,6 +112,11 @@ def _impact_shift(cfg: dict, price: float, qty: float, action: str) -> float:
         return coeff * abs(qty)
     if mode == "sqrt":
         return coeff * math.sqrt(abs(qty))
+    if mode == "volume_linear":
+        # participation rate qty/volume scaled by price - needs per-trade volume
+        if not vol:
+            raise ValueError("market_impact volume_linear needs per-trade 'volume'")
+        return coeff * (abs(qty) / float(vol)) * price
     if mode == "callable":
         return float(cfg["fn"](price, qty, action))
     raise ValueError(f"unknown market_impact mode {mode!r}")
@@ -155,6 +161,8 @@ def net_audit(trades_log: List[Dict], cfg: Dict) -> Dict:
     gross = comm = finc = 0.0
     drag_spread = drag_slip = drag_impact = drag_tick = 0.0
     fin_ok = True
+    impact_missing = False     # volume_linear configured but a fill lacks 'volume'
+    exec_issues: List[tuple] = []
     violations: List[str] = []
     configured = {
         "spread": spr.get("mode", "none") != "none",
@@ -163,6 +171,13 @@ def net_audit(trades_log: List[Dict], cfg: Dict) -> Dict:
         "commission": com.get("mode", "none") != "none",
         "financing": fin is not None and fin.get("mode") != "none",
     }
+    # ---- V3.6 instrument / execution-realism contract --------------------------
+    inst = cfg.get("instrument") or {}
+    qs = float(inst.get("qty_step") or 0.0)
+    mq = float(inst.get("min_qty") or 0.0)
+    mn = float(inst.get("min_notional") or 0.0)
+    cs = float(inst.get("contract_size") or 1.0)
+    instrument_declared = (qs > 0.0 or mq > 0.0 or mn > 0.0 or cs != 1.0)
 
     for tr in trades_log:
         side = tr.get("side", "long")
@@ -171,6 +186,18 @@ def net_audit(trades_log: List[Dict], cfg: Dict) -> Dict:
         direction = 1.0 if side in ("long", "buy") else -1.0
         gross += (xp - ep) * direction * qty
 
+        # ---- execution realism: can this fill actually happen? ----------------
+        if qs > 0.0 and abs(qty / qs - round(qty / qs)) > 1e-9:
+            exec_issues.append(("EXEC_QTY_STEP", f"qty={qty:g} not expressible with "
+                                                 f"qty_step={qs:g}"))
+        if mq > 0.0 and qty < mq:
+            exec_issues.append(("EXEC_MIN_QTY", f"qty={qty:g} < min_qty={mq:g} "
+                                                f"(ghost fill)"))
+        if mn > 0.0 and qty * cs * abs(ep) < mn:
+            exec_issues.append(("EXEC_MIN_NOTIONAL",
+                                f"entry notional {qty:g}*{cs:g}*{abs(ep):g} "
+                                f"< min_notional={mn:g}"))
+
         e_act, x_act = _side_action(side, True), _side_action(side, False)
 
         # adverse shifts (price units), per fill
@@ -178,8 +205,13 @@ def net_audit(trades_log: List[Dict], cfg: Dict) -> Dict:
         spr_x = _shift_amount(spr, "spread", xp, qty) / 2.0
         slp_e = _shift_amount(slp, "slippage", ep, qty)
         slp_x = _shift_amount(slp, "slippage", xp, qty)
-        imp_e = _impact_shift(imp, ep, qty, e_act)
-        imp_x = _impact_shift(imp, xp, qty, x_act)
+        vol = tr.get("volume")
+        if imp.get("mode") == "volume_linear" and not vol:
+            impact_missing = True            # cannot price impact without liquidity
+            imp_e = imp_x = 0.0
+        else:
+            imp_e = _impact_shift(imp, ep, qty, e_act, vol)
+            imp_x = _impact_shift(imp, xp, qty, x_act, vol)
 
         # base adverse price BEFORE tick
         b_e = _shift(e_act, ep, spr_e + slp_e + imp_e)
@@ -193,8 +225,9 @@ def net_audit(trades_log: List[Dict], cfg: Dict) -> Dict:
                            ("market_impact", imp_e + imp_x)):
             if configured[label] and amt < 0.0:
                 violations.append(f"{label} charged {amt:.6g} (< 0) on one fill")
-        comm_e = _commission(com, abs(ep) * qty, qty, True)
-        comm_x = _commission(com, abs(xp) * qty, qty, False)
+        notional_scale = qty * cs
+        comm_e = _commission(com, abs(ep) * notional_scale, qty, True)
+        comm_x = _commission(com, abs(xp) * notional_scale, qty, False)
         if configured["commission"] and (comm_e < 0.0 or comm_x < 0.0):
             violations.append(f"commission charged {comm_e + comm_x:.6g} (< 0) "
                               f"across the round trip")
@@ -213,8 +246,8 @@ def net_audit(trades_log: List[Dict], cfg: Dict) -> Dict:
             else:
                 secs = _to_seconds(tr["exit_ts"]) - _to_seconds(tr["entry_ts"])
                 days = max(0.0, secs) / 86400.0
-                notional = abs(ep) * qty
-                finc += notional * float(fin.get("value_bps_per_day", 0.0)) / 1e4 * days
+                finc += abs(ep) * notional_scale * \
+                    float(fin.get("value_bps_per_day", 0.0)) / 1e4 * days
 
     total_cost = drag_tick + drag_spread + drag_slip + drag_impact + comm + finc
     net = gross - total_cost
@@ -234,9 +267,12 @@ def net_audit(trades_log: List[Dict], cfg: Dict) -> Dict:
         "spread": "PASS" if configured["spread"] else "NOT VERIFIED",
         "slippage": "PASS" if configured["slippage"] else "NOT VERIFIED",
         "tick_size": "PASS" if t else "NOT VERIFIED",
-        "market_impact": "PASS" if configured["market_impact"] else "NOT VERIFIED",
+        "market_impact": ("PASS" if configured["market_impact"]
+                          and not impact_missing else "NOT VERIFIED"),
         "financing": ("PASS" if fin_ok and configured["financing"]
                       else "NOT VERIFIED"),
+        "execution": ("PASS" if instrument_declared and not exec_issues
+                      else ("FAIL" if instrument_declared else "NOT VERIFIED")),
     }
     issues = []
     if violations:
@@ -245,6 +281,16 @@ def net_audit(trades_log: List[Dict], cfg: Dict) -> Dict:
                                   f"{len(violations)} fill(s): {violations[0]} - a "
                                   f"cost model that PAYS the trader is rejected, "
                                   f"never VERIFIED"})
+    seen_codes = set()
+    for code, msg in exec_issues:          # one issue per violated rule
+        if code in seen_codes:
+            continue
+        seen_codes.add(code)
+        issues.append({"code": code, "severity": "P1",
+                       "finding": f"{msg} under the declared instrument "
+                                  f"(qty_step={qs:g}, min_qty={mq:g}, "
+                                  f"min_notional={mn:g}, contract_size={cs:g}) - "
+                                  f"the fill cannot execute as written"})
     verdict = "FAIL" if violations else "VERIFIED"
     declared_missing = [k for k in ("commission", "spread", "slippage",
                                     "market_impact", "financing")

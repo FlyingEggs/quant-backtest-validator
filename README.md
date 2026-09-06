@@ -22,7 +22,7 @@ print(audit_text(strategy, df, ...))
 ```bash
 python3 examples/audit_demo.py                   # two full client-style reports -> ./reports/
 python3 examples/demo.py                         # six mechanistic archetypes (primitives)
-python3 -m unittest discover -s tests -v         # 166 unit tests (adversarial + V3 engines)
+python3 -m unittest discover -s tests -v         # 177 unit tests (adversarial + V3 engines)
 ```
 
 ## What it is (and is not)
@@ -53,7 +53,7 @@ quant-backtest-validator/
 │   ├── audit.py           # audit() / audit_text() entry points
 │   └── types.py           # Strategy / DataSpec contracts
 ├── examples/  (audit_demo.py, demo.py)
-├── tests/     (166 unit tests)
+├── tests/     (177 unit tests)
 └── reports/   (sample JSON reports produced by audit_demo.py)
 ```
 
@@ -268,6 +268,25 @@ Three hard guarantees added after an adversarial cost round (V3.5.0):
   (`MTF_TRANSFORM_DECLARED`, P3): the engine cannot see inside a callable, so a custom
   transform never yields a verified PASS — a detected leak on one still FAILs.
 
+## V3.6 — Instrument realism (execution realism on the fills)
+
+`DataSpec` carries an instrument contract (`qty_step` / `min_qty` / `min_notional` /
+`contract_size`; all default = not declared). Enforced inside the net cost engine, so a
+backtest whose fills **cannot actually execute** is surfaced instead of blessed:
+
+* `EXEC_QTY_STEP` (P1) — qty not expressible as a multiple of `qty_step` (e.g. 1.237 on a
+  0.1 lot); `EXEC_MIN_QTY` (P1) — ghost fills below `min_qty`; `EXEC_MIN_NOTIONAL` (P1) —
+  `qty × contract_size × price` below the floor. Fills carrying P1 move Costs to
+  CONDITIONAL PASS.
+* `contract_size ≠ 1` scales the notional base for commission / financing (futures
+  semantics; default 1.0 changes nothing).
+* Market impact gains `volume_linear` (`coeff × (qty/volume) × price`, participation-rate
+  model) — per-trade `volume` comes from `trades_log`. Configured but no volume data ⇒ the
+  sub-model is NOT VERIFIED and the Costs section downgrades (state-consistency rule).
+* Partial fills / queue position are NOT simulated — declared on the roadmap (intrabar
+  execution model). Nothing declared ⇒ `execution` sub-check NOT VERIFIED, never assumed
+  clean.
+
 ## V3.3 — OOS / Walk-Forward research contract
 
 Activated by `config["oos"]`. Three machine contracts:
@@ -337,7 +356,7 @@ one case to budget for — drop `n_shuffles` or vectorise, don't silently skip R
 | Parameter surface (V3.4) | ✅ 2D plateau/island/ridge + trade clustering |
 | CI / lint (V3.4.2) | ✅ GitHub Actions: unittest matrix 3.9–3.12 + coverage artifact + `mypy validator/` baseline clean (see `mypy.ini`) |
 | Full `mypy --strict` cleanup | roadmap — needs report-container TypedDicts across the engine (heterogeneous report dicts currently use `Dict[str, Any]` deliberately) |
-| Instrument realism (V3.6) | **planned** — `DataSpec` qty_step/min_qty/min_notional/contract_size; EXEC_QTY_STEP/EXEC_MIN_QTY/EXEC_MIN_NOTIONAL; volume-aware impact (`volume_linear`); partial-fill/queue declared NOT VERIFIED (intrabar engine stays roadmap) |
+| Instrument realism (V3.6) | ✅ `DataSpec` qty_step/min_qty/min_notional/contract_size; EXEC_QTY_STEP/EXEC_MIN_QTY/EXEC_MIN_NOTIONAL; volume-aware impact (`volume_linear`); partial-fill/queue declared NOT VERIFIED (intrabar engine stays roadmap) |
 | Parameter provenance (V3.7) | **planned** — `Strategy.fit_is` + `accepts_frozen` contract; frozen-vs-adversarial injection probe → PARAM_PROVENANCE P0 on hidden refit; frozen_hash into OOS evidence |
 | Certification contract (V3.8) | **planned** — audit_id / generated_at / strategy_hash / data_hash anchors; L0-L4 certification level over sections (L5 adversarial suite, L6 live parity, L7 signed immutable audits: engine max L4, higher levels are product roadmap) |
 | Statistical significance certification (V3.9+) | **planned** — multiple-testing correction · White's Reality Check / SPA · Deflated & Probabilistic Sharpe Ratio · regime/bootstrap block dependence (own workstream before implementation) |

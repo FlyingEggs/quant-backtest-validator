@@ -20,7 +20,7 @@ from validator import (data_integrity, execution, lookahead, statistics,
 from validator import report as report_mod
 from validator.types import DataSpec, Strategy, default_config
 
-ENGINE_VERSION = "3.5.0"
+ENGINE_VERSION = "3.6.0"
 
 ALL_SECTIONS = ["Data Integrity", "Look-ahead", "Execution", "Statistics",
                 "Robustness", "Costs", "MTF"]
@@ -34,7 +34,7 @@ def _build_sections(strategy, df, spec, cfg, scope: List[str]) -> Dict[str, Dict
         "Execution": lambda: execution.check(strategy, df, spec, cfg),
         "Statistics": lambda: statistics.check(strategy, df, spec, cfg),
         "Robustness": lambda: robustness.check(strategy, df, spec, cfg),
-        "Costs": lambda: costs.net_check(strategy, df, cfg),
+        "Costs": lambda: costs.net_check(strategy, df, cfg, spec),
         "MTF": lambda: mtf.check(df, spec, cfg),
     }
     return {name: builders[name]() for name in ALL_SECTIONS if name in scope}

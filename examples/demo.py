@@ -32,6 +32,7 @@ def next_open_hold(hold: int):
     def run(df: pd.DataFrame) -> dict:
         sig = df["sig"].fillna(0).astype(float).values
         o = df["open"].values
+        vol = df["volume"].values if "volume" in df.columns else None
         n = len(df)
         dt = isinstance(df.index, pd.DatetimeIndex)
         pnl, trades, pos, entry_i, rets, log = 0.0, 0, 0.0, -1, [], []
@@ -42,12 +43,15 @@ def next_open_hold(hold: int):
                 pnl += (px - pos) * 1.0
                 rets.append((px - pos) / pos if pos else 0.0)
                 if dt:
-                    log.append({"side": "long", "qty": 1.0,
-                                "signal_ts": df.index[entry_i],
-                                "entry_ts": df.index[entry_i + 1],
-                                "exit_ts": df.index[exit_i],
-                                "entry_price": float(pos),
-                                "exit_price": float(px)})
+                    entry = {"side": "long", "qty": 1.0,
+                             "signal_ts": df.index[entry_i],
+                             "entry_ts": df.index[entry_i + 1],
+                             "exit_ts": df.index[exit_i],
+                             "entry_price": float(pos),
+                             "exit_price": float(px)}
+                    if vol is not None:
+                        entry["volume"] = float(vol[entry_i + 1])
+                    log.append(entry)
                 pos = 0.0
             if pos == 0.0 and sig[i] == 1.0 and i + 1 < n:
                 pos = o[i + 1]
@@ -68,8 +72,12 @@ def frame(closes: np.ndarray, bar_seconds: int = 300) -> pd.DataFrame:
     high = np.maximum(open_, closes) * 1.0005
     low = np.minimum(open_, closes) * 0.9995
     idx = pd.date_range("2026-01-01", periods=n, freq=f"{bar_seconds}s")
-    return pd.DataFrame({"open": open_, "high": high, "low": low, "close": closes},
-                        index=idx)
+    # deterministic pseudo-volume: an order of magnitude above any demo fill qty,
+    # so volume-aware impact models have data to consume
+    rng = np.random.default_rng(n)
+    volume = 500.0 + 400.0 * np.abs(rng.normal(0, 1, n))
+    return pd.DataFrame({"open": open_, "high": high, "low": low, "close": closes,
+                         "volume": volume}, index=idx)
 
 
 # ---------------------------------------------------------------------------

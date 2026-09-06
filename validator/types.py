@@ -46,6 +46,13 @@ class DataSpec:
     # CLOSE must declare so (data_integrity reports DATA_TS_SEMANTICS instead of
     # blessing a CLOSE-indexed frame with OPEN-semantics checks).
     bar_timestamp_semantics: str = "OPEN"   # "OPEN" | "CLOSE"
+    # ---- V3.6 instrument / execution-realism contract -------------------------
+    # 0.0 / default = NOT declared -> the corresponding realism sub-check is
+    # reported NOT VERIFIED, never assumed clean.
+    qty_step: float = 0.0        # qty must be expressible as a multiple of qty_step
+    min_qty: float = 0.0         # fills below min_qty cannot execute (ghost fills)
+    min_notional: float = 0.0    # notional = qty * contract_size * price floor
+    contract_size: float = 1.0   # futures: qty is in contracts; notional = qty*size*price
 
 
 def as_strategy(name: str, run_df: Callable[[pd.DataFrame], Dict],

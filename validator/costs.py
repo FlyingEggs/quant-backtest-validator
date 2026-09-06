@@ -16,7 +16,19 @@ from validator import costengine
 from validator.types import Strategy, run_metrics
 
 
-def _gate(cost: Dict, trades_log) -> Dict:
+def _instrument_dict(spec) -> Dict:
+    """Pull the declared instrument contract off DataSpec (empty = not declared)."""
+    if spec is None:
+        return {}
+    out = {}
+    for k in ("qty_step", "min_qty", "min_notional", "contract_size"):
+        v = getattr(spec, k, None)
+        if v:
+            out[k] = v
+    return out
+
+
+def _gate(cost: Dict, trades_log, spec=None) -> Dict:
     """Shared tail: static config gate + net-engine status mapping.
 
     Status rules:
@@ -48,7 +60,11 @@ def _gate(cost: Dict, trades_log) -> Dict:
                                        "audit NOT VERIFIED"}],
                 "notes": ["declared, not net-audited - return trades_log from run() "
                           "to enable the V3.2 net engine"]}
-    net = costengine.net_audit(trades_log, cost)
+    net_cfg = dict(cost)
+    inst = _instrument_dict(spec)
+    if inst:
+        net_cfg["instrument"] = inst      # V3.6: DataSpec instrument contract
+    net = costengine.net_audit(trades_log, net_cfg)
     notes.append(f"net PnL {net['net_pnl']:,.2f} vs gross {net['gross_pnl']:,.2f} "
                  f"(cost drag {net['cost_drag_pct']}%)")
     notes.append("sub-models: " + ", ".join(f"{k}={v}" for k, v in
@@ -67,11 +83,16 @@ def _gate(cost: Dict, trades_log) -> Dict:
                                        f"overall cost is NOT VERIFIED, never "
                                        f"VERIFIED with a dead sub-model"}],
                 "notes": notes, "evidence": {"net": net}}
-    return {"status": "VERIFIED", "issues": [], "notes": notes,
+    # net ran without invariant breaks; surface engine-level findings
+    # (V3.6 EXEC_* P1 etc.) - they must move the section, not vanish.
+    if any(i["severity"] == "P1" for i in net["issues"]):
+        return {"status": "CONDITIONAL PASS", "issues": net["issues"],
+                "notes": notes, "evidence": {"net": net}}
+    return {"status": "VERIFIED", "issues": net["issues"], "notes": notes,
             "evidence": {"net": net}}
 
 
-def net_check(strategy: Strategy, df, config: Dict) -> Dict:
+def net_check(strategy: Strategy, df, config: Dict, spec=None) -> Dict:
     """Audit-pipeline wrapper: pulls per-trade fills from the strategy run itself."""
     cost = config.get("cost")
     if cost is None:
@@ -81,7 +102,7 @@ def net_check(strategy: Strategy, df, config: Dict) -> Dict:
                                        "reported PnL is gross; treat as NOT VERIFIED"}],
                 "notes": ["supply config['cost'] with fee/slippage/funding to verify"]}
     res = run_metrics(strategy, df)
-    return _gate(cost, res.get("trades_log"))
+    return _gate(cost, res.get("trades_log"), spec)
 
 
 def costs_check(config: Dict) -> Dict:
