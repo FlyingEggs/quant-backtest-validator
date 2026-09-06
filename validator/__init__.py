@@ -21,7 +21,7 @@ from validator.types import (
 from validator import (data_integrity, execution, lookahead, statistics,
                        robustness, costs, mtf, costengine, wf, surface)
 
-__version__ = "4.1.0"
+__version__ = "4.2.0"
 __all__ = [
     # primitives
     "EXPANSION_HOURS", "full_audit", "lag_sensitivity", "period_expansion",

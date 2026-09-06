@@ -52,8 +52,27 @@ def check(strategy: Strategy, df, spec: DataSpec, config: Dict) -> Dict:
         notes.append(f"return_unit assumed 'trade' but len(rets)={n_rets} != "
                      f"{src}={ref_n}; declare return_unit explicitly to verify")
 
-    rep = core.return_independence(rets, verbose=False)
+    # ---- V4.2 red-team: rets must ALSO match the ledger's own per-trade returns.
+    # Same length is not enough - a strategy can return len(rets)==trades while
+    # rets values have nothing to do with the trades (e.g. 50% on a 10% move).
+    if ledger is not None and n_rets == len(ledger):
+        for i, (r, t) in enumerate(zip(rets, ledger)):
+            ep, xp = t.get("entry_price"), t.get("exit_price")
+            if ep is None or xp is None or float(ep) == 0.0:
+                continue
+            direction = 1.0 if t.get("side", "long") in ("long", "buy") else -1.0
+            ledger_ret = (float(xp) - float(ep)) * direction / float(ep)
+            if abs(float(r) - ledger_ret) > 1e-6:
+                issues.append({"code": "STAT_RETS_LEDGER_MISMATCH",
+                               "severity": "P1",
+                               "finding": f"rets[{i}]={float(r):.6f} but the ledger "
+                                          f"trade implies "
+                                          f"{ledger_ret:+.6f} (entry {ep}, exit {xp}, "
+                                          f"{t.get('side', 'long')}) - rets are not "
+                                          f"the per-trade returns of this ledger"})
+                break
 
+    rep = core.return_independence(rets, verbose=False)
     if rep["verdict"] == "AUTOCORRELATED" and rep["n_eff"] is not None:
         r = rep["n_eff"] / rep["n"]
         notes.append(f"N_eff={rep['n_eff']} / n={rep['n']} (ratio {r:.2f}); overlapping "

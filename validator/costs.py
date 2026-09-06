@@ -10,7 +10,9 @@ States:
 
 from __future__ import annotations
 
-from typing import Dict, Optional
+from typing import Dict, List, Optional
+
+import pandas as pd
 
 from validator import costengine
 from validator.types import Strategy, run_metrics
@@ -112,6 +114,49 @@ def _gate(cost: Dict, trades_log, spec=None,
             "evidence": {"net": net}}
 
 
+PRICE_BAR_TOL = 0.01    # 1% slack outside the bar's [low, high] before a fill is
+                        # judged unreachable - a market fill belongs inside the range
+
+
+def _price_reachability_issues(trades_log, df) -> List[Dict]:
+    """Red-team guard: fill prices must be reachable against the frame's OHLC.
+    A trade whose entry/exit timestamp maps onto a bar but whose price is far
+    outside that bar's [low, high] is fabricated - the ledger is self-consistent
+    yet disconnected from the market data (the earlier VERIFIED hole)."""
+    if df is None or not isinstance(df.index, pd.DatetimeIndex) or not trades_log:
+        return []
+    lo = df["low"].to_numpy(dtype=float)
+    hi = df["high"].to_numpy(dtype=float)
+    idx = df.index
+    issues = []
+    for i, t in enumerate(trades_log):
+        for tag in ("entry_price", "exit_price"):
+            px = t.get(tag)
+            ts = t.get("entry_ts" if tag == "entry_price" else "exit_ts")
+            if px is None or ts is None:
+                continue
+            try:
+                bar = idx.get_indexer([pd.Timestamp(ts)], method=None)[0]
+            except Exception:
+                bar = -1
+            if bar < 0 or bar >= len(df):
+                continue                       # timestamp not on a bar -> unverifiable
+            p = float(px)
+            tol = max(lo[bar], hi[bar]) * PRICE_BAR_TOL
+            if p < lo[bar] - tol or p > hi[bar] + tol:
+                issues.append({"code": "EXEC_PRICE_UNREACHABLE", "severity": "P1",
+                               "finding": f"trade[{i}] {tag}={p:,.2f} at bar "
+                                          f"[{df.index[bar]}] whose range is "
+                                          f"[{lo[bar]:,.2f}, {hi[bar]:,.2f}] - the "
+                                          f"fill price is unreachable in this market "
+                                          f"data (fabricated ledger?)"})
+    # dedupe identical findings
+    uniq = {}
+    for it in issues:
+        uniq[it["finding"]] = it
+    return list(uniq.values())
+
+
 def net_check(strategy: Strategy, df, config: Dict, spec=None) -> Dict:
     """Audit-pipeline wrapper: pulls per-trade fills from the strategy run itself."""
     cost = config.get("cost")
@@ -123,7 +168,18 @@ def net_check(strategy: Strategy, df, config: Dict, spec=None) -> Dict:
                 "notes": ["supply config['cost'] with fee/slippage/funding to verify"]}
     res = run_metrics(strategy, df)
     reported = float(res.get("pnl", 0.0)) if res.get("pnl") is not None else None
-    return _gate(cost, res.get("trades_log"), spec, reported)
+    out = _gate(cost, res.get("trades_log"), spec, reported)
+    reach = _price_reachability_issues(res.get("trades_log") or [], df)
+    if reach:
+        # fabricated-price findings must move the section, never vanish
+        if any(i["severity"] == "P0" for i in out.get("issues", [])):
+            out["issues"] = out["issues"] + reach
+        elif out.get("status") in ("VERIFIED", "CONDITIONAL PASS"):
+            out["status"] = "CONDITIONAL PASS"
+            out["issues"] = (out.get("issues") or []) + reach
+        else:
+            out["issues"] = out.get("issues", []) + reach
+    return out
 
 
 def costs_check(config: Dict) -> Dict:

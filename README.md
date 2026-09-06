@@ -22,7 +22,7 @@ print(audit_text(strategy, df, ...))
 ```bash
 python3 examples/audit_demo.py                   # two full client-style reports -> ./reports/
 python3 examples/demo.py                         # six mechanistic archetypes (primitives)
-python3 -m unittest discover -s tests -v         # 257 unit tests (adversarial + V3/V4 engines)
+python3 -m unittest discover -s tests -v         # 264 unit tests (adversarial + V3/V4 engines)
 ```
 
 ## What it is (and is not)
@@ -54,7 +54,7 @@ quant-backtest-validator/
 │   ├── audit.py           # audit() / audit_text() entry points
 │   └── types.py           # Strategy / DataSpec contracts
 ├── examples/  (audit_demo.py, demo.py)
-├── tests/     (257 unit tests)
+├── tests/     (264 unit tests)
 └── reports/   (sample JSON reports produced by audit_demo.py)
 ```
 
@@ -407,6 +407,29 @@ External-audit round; each item was reproduced as a real gap before fixing:
   reported, never blessed); Data Integrity checks expected bar spacing against
   `DataSpec.bar_seconds` (`DATA_NONUNIFORM`, P2, with gap/missing stats) — non-uniform
   5m/35m/5m series no longer pass silently.
+
+## V4.2 — Red-team attack audit
+
+Attacks were constructed from a hostile-strategy developer's viewpoint and actually run;
+what got through was fixed, what was caught is locked as regression, heuristics stay
+honest:
+
+* **F1 — forged ledger, legal timeline, unreachable prices** (was PASS): a trade whose
+  entry/exit timestamp maps onto a bar but whose price lies far outside that bar's
+  `[low, high]` (entry 100 / exit 140 vs bars ~3160) is a fabricated ledger →
+  `EXEC_PRICE_UNREACHABLE` (P1). Honest next-open fills (inside the bars) do not trip it.
+* **F2 — rets one-per-trade but values unrelated to the ledger** (was clean): 50%
+  "returns" on a ledger of 10% moves → `STAT_RETS_LEDGER_MISMATCH` (P1) via per-trade
+  cross-check `(exit-entry)·dir/entry`.
+* **F3 — hostile config DoS** (was a full audit crash): a cost callable that raises, or
+  any section that throws on hostile input, now fails that SECTION with
+  `SECTION_ERROR` (P0) — the audit refuses to run the input silently instead of
+  crashing.
+* **Boundary (asserted, not fixed)**: a *shattered* long-period signal still trips
+  `PERIOD_EXPANSION` (sparse 0-runs are long constant runs) — only an explicit
+  `expansion_confirmation` lets it through, a declared choice, never a silent clean.
+  Same-frame, in-scope red-team checks (NaN/`scope`-narrowing etc.) keep reporting scope
+  and coverage so a narrow audit cannot masquerade as a full one.
 
 ## V3.3 — OOS / Walk-Forward research contract
 

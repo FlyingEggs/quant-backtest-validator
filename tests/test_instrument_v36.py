@@ -104,13 +104,18 @@ class TestVolumeAwareImpact(unittest.TestCase):
 class TestInstrumentThroughAudit(unittest.TestCase):
     """DataSpec instrument reaches the Costs section via the audit pipeline."""
 
-    def _run_audit(self, spec, cost=None):
+    def _run_audit(self, spec, cost=None, qty=1.237):
         df = D.regime_trend_df(n=600)
 
         def run(frame, params):
-            # ledger-consistent: 3 legs of qty 1.237 x gross 10 = 37.11
-            return {"pnl": 37.11, "trades": 3,
-                    "trades_log": [tr(qty=1.237) for _ in range(3)]}
+            # prices ride the frame's own bars so they are reachable (F1-clean);
+            # qty legs of +0.1 gross each -> ledger = 3 * qty * 0.1 == pnl
+            o = frame["open"]
+            e0 = float(o.iloc[5])
+            log = [{"side": "long", "qty": qty, "entry_price": e0,
+                    "exit_price": e0 + 0.1, "entry_ts": frame.index[5],
+                    "exit_ts": frame.index[6]} for _ in range(3)]
+            return {"pnl": 3 * qty * 0.1, "trades": 3, "trades_log": log}
         strat = Strategy(name="ghost", run=run, entry_semantics="next_open")
         cfg = {"scope": ["Costs"], "seed": 1,
                "cost": cost or {"commission": {"mode": "bps", "open_rate": 5.0,
@@ -131,18 +136,8 @@ class TestInstrumentThroughAudit(unittest.TestCase):
 
     def test_clean_instrument_verified(self):
         spec = SPEC.__class__(bar_seconds=300, qty_step=0.1, min_qty=1.0)
-        # qty=1.237 still fails step -> use exact-lot trades for the clean case
-        df = D.regime_trend_df(n=600)
-
-        def run(frame, params):
-            # ledger-consistent: 3 legs of qty 1.2 x gross 10 = 36.0
-            return {"pnl": 36.0, "trades": 3,
-                    "trades_log": [tr(qty=1.2) for _ in range(3)]}
-        strat = Strategy(name="lot", run=run, entry_semantics="next_open")
-        rep = audit(strat, df, spec, {"scope": ["Costs"], "seed": 1,
-                                      "cost": {"commission": {"mode": "bps",
-                                                              "open_rate": 5.0,
-                                                              "close_rate": 5.0}}})
+        # qty=1.237 still fails step -> exact-lot qty 1.2 for the clean case
+        rep = self._run_audit(spec, qty=1.2)
         self.assertEqual(rep["sections"]["Costs"]["status"], "VERIFIED")
 
 

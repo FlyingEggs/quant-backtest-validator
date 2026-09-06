@@ -23,9 +23,12 @@ SPEC = DataSpec(bar_seconds=300, source="synthetic")
 
 
 def ledger_trade(k=1.0, ep=100.0, ret=1.0):
+    # timestamps deliberately off the frame's bars: these ledger-integrity tests
+    # exercise pnl-vs-ledger consistency, not price reachability (red-team F1
+    # covers reachability separately with real bar prices)
     return {"side": "long", "qty": k, "entry_price": ep, "exit_price": ep + ret,
-            "entry_ts": pd.Timestamp("2026-01-01"),
-            "exit_ts": pd.Timestamp("2026-01-02")}
+            "entry_ts": pd.Timestamp("1990-01-01"),
+            "exit_ts": pd.Timestamp("1990-01-02")}
 
 
 class TestLedgerPnLConsistency(unittest.TestCase):
@@ -59,12 +62,13 @@ class TestLedgerPnLConsistency(unittest.TestCase):
                          [i["code"] for i in sec["issues"]])
 
     def test_consistent_multileg_pnl_verified(self):
-        # long + short legs net to zero-ish ledger
+        # long + short legs net to zero-ish ledger; timestamps off-frame so these
+        # consistency tests stay clear of the F1 price-reachability check
         legs = [ledger_trade(ret=5.0),
                 {"side": "short", "qty": 1.0, "entry_price": 105.0,
                  "exit_price": 100.0,
-                 "entry_ts": pd.Timestamp("2026-01-02"),
-                 "exit_ts": pd.Timestamp("2026-01-03")}]
+                 "entry_ts": pd.Timestamp("1990-01-02"),
+                 "exit_ts": pd.Timestamp("1990-01-03")}]
         rep = self._audit(5.0 + 5.0, legs)
         self.assertEqual(rep["sections"]["Costs"]["status"], "VERIFIED")
 

@@ -21,7 +21,7 @@ from validator import manifest as manifest_mod
 from validator import report as report_mod
 from validator.types import DataSpec, Strategy, default_config
 
-ENGINE_VERSION = "4.1.0"
+ENGINE_VERSION = "4.2.0"
 
 ALL_SECTIONS = ["Data Integrity", "Look-ahead", "Execution", "Statistics",
                 "Robustness", "Costs", "MTF"]
@@ -38,7 +38,22 @@ def _build_sections(strategy, df, spec, cfg, scope: List[str]) -> Dict[str, Dict
         "Costs": lambda: costs.net_check(strategy, df, cfg, spec),
         "MTF": lambda: mtf.check(df, spec, cfg),
     }
-    return {name: builders[name]() for name in ALL_SECTIONS if name in scope}
+    out = {}
+    for name in ALL_SECTIONS:
+        if name not in scope:
+            continue
+        try:
+            out[name] = builders[name]()
+        except Exception as exc:   # red-team guard: a hostile strategy/config must
+            # fail the SECTION (P0), never crash the whole audit silently.
+            out[name] = {"status": "FAIL",
+                         "issues": [{"code": "SECTION_ERROR", "severity": "P0",
+                                     "finding": f"{name} section crashed with "
+                                                f"{type(exc).__name__}: {exc} - the "
+                                                f"audit refuses to run this input "
+                                                f"silently"}],
+                         "notes": [f"section raised {type(exc).__name__}: {exc}"]}
+    return out
 
 
 def audit(strategy: Strategy, df: pd.DataFrame,

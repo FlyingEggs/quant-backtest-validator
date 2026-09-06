@@ -26,13 +26,26 @@ def plain_run(df, params, with_log=False):
     rets = np.random.default_rng(3).normal(0, 1, 200).tolist()
     res = {"pnl": 10.0, "trades": 200, "rets": rets}
     if with_log:
-        # ledger consistent with the headline: 200 legs, +0.05 gross each = pnl 10
+        # Ledger consistent with headline AND with rets: each leg's return IS the
+        # small rng draw (so STAT_RETS_LEDGER_MISMATCH stays quiet), prices ride
+        # the frame's own bars inside a single bar (F1-reachable, no cross-bar
+        # drift), and pnl is the sum of the leg grosses.
+        r = np.random.default_rng(4).normal(0, 1e-4, 200)
         ts = df.index.to_numpy() if isinstance(df.index, pd.DatetimeIndex) else None
-        res["trades_log"] = [{"side": "long", "qty": 1.0,
-                              "signal_ts": ts[0], "entry_ts": ts[min(i + 1, n - 1)],
-                              "exit_ts": ts[min(i + 2, n - 1)],
-                              "entry_price": 100.0, "exit_price": 100.05}
-                             for i in range(200)]
+        opens = df["open"].to_numpy() if "open" in df.columns else None
+        res["trades_log"] = []
+        gross = 0.0
+        for i in range(200):
+            b = min(i + 1, n - 1)
+            ep = float(opens[b]) if opens is not None else 100.0
+            xp = ep * (1.0 + r[i])
+            gross += (xp - ep)
+            res["trades_log"].append({"side": "long", "qty": 1.0,
+                                      "signal_ts": ts[b - 1], "entry_ts": ts[b],
+                                      "exit_ts": ts[b],
+                                      "entry_price": ep, "exit_price": xp})
+        res["pnl"] = gross
+        res["rets"] = r.tolist()
     return res
 
 
