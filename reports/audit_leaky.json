@@ -1,5 +1,5 @@
 {
-  "engine_version": "3.5.0",
+  "engine_version": "3.8.0",
   "strategy": "same-bar confirmation fill",
   "scope": [
     "Data Integrity",
@@ -194,6 +194,19 @@
     }
   ],
   "recommendation": "DO NOT DEPLOY - close all P0 findings (execution look-ahead / unconfirmed expansion / entry semantics / broken data) and re-audit before relying on reported performance",
+  "certification": {
+    "audit_id": "QBV-20260906-48aa598b",
+    "generated_at": "2026-09-06T00:30:29+00:00",
+    "strategy_hash": "5d164e9129477a758b87f79af6e3a7cab45045f09f2101a8b94ef22477198bc1",
+    "strategy_hash_note": null,
+    "data_hash": "368c0c8def17552b95a2130fc53a02efaabb81487dec32622bd24d4185aa04fb",
+    "data_hash_note": "full-frame OHLC fingerprint (index + OHLC)",
+    "level": "L0",
+    "reason": "L1 TEMPORAL: not clean (status ['MTF'], 0 P0/P1)",
+    "max_supported_level": "L4",
+    "signed": false,
+    "signature_note": "immutable signed audits need a key infrastructure (L7 on the product roadmap)"
+  },
   "config_summary": {
     "seed": 7,
     "n_shuffles": 200,

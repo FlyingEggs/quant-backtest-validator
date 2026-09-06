@@ -1,5 +1,5 @@
 {
-  "engine_version": "3.5.0",
+  "engine_version": "3.8.0",
   "strategy": "EMA-trend (next-open, hold 5)",
   "scope": [
     "Data Integrity",
@@ -104,7 +104,7 @@
       "issues": [],
       "notes": [
         "net PnL 44,148.90 vs gross 48,883.82 (cost drag 9.69%)",
-        "sub-models: commission=PASS, spread=NOT VERIFIED, slippage=PASS, tick_size=NOT VERIFIED, market_impact=NOT VERIFIED, financing=NOT VERIFIED"
+        "sub-models: commission=PASS, spread=NOT VERIFIED, slippage=PASS, tick_size=NOT VERIFIED, market_impact=NOT VERIFIED, financing=NOT VERIFIED, execution=NOT VERIFIED"
       ],
       "evidence": {
         "net": {
@@ -163,7 +163,8 @@
             "slippage": "PASS",
             "tick_size": "NOT VERIFIED",
             "market_impact": "NOT VERIFIED",
-            "financing": "NOT VERIFIED"
+            "financing": "NOT VERIFIED",
+            "execution": "NOT VERIFIED"
           }
         }
       }
@@ -203,6 +204,19 @@
     }
   ],
   "recommendation": "No blocking findings in the VERIFIED scope, but the audit is INCOMPLETE (coverage 86%; NOT VERIFIED: MTF). PASS is only granted when every scope item is VERIFIED (DECLARED != VERIFIED) - complete the scope before treating this as a clean bill.",
+  "certification": {
+    "audit_id": "QBV-20260906-58458a03",
+    "generated_at": "2026-09-06T00:30:24+00:00",
+    "strategy_hash": "f4582dfddfd00ea3753d020f102eb3af3379a91e173bb510a0a3b042d76b6779",
+    "strategy_hash_note": null,
+    "data_hash": "6c4bd7d9074952c172347efb194759e07dc2d28ccf9b05a28f6b2b79398e564b",
+    "data_hash_note": "full-frame OHLC fingerprint (index + OHLC)",
+    "level": "L0",
+    "reason": "L1 TEMPORAL: not clean (status ['MTF'], 0 P0/P1)",
+    "max_supported_level": "L4",
+    "signed": false,
+    "signature_note": "immutable signed audits need a key infrastructure (L7 on the product roadmap)"
+  },
   "config_summary": {
     "seed": 11,
     "n_shuffles": 200,

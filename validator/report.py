@@ -14,15 +14,88 @@ PASS can never mask weak significance.
 
 from __future__ import annotations
 
+import hashlib
+import inspect
+import secrets
 import textwrap
-from typing import Dict, List
+from datetime import datetime, timezone
+from typing import Dict, List, Optional
+
+import pandas as pd
+
+from validator.types import Strategy
 
 WEIGHTS = {"P0": 40, "P1": 15, "P2": 5, "P3": 2, "P4": 0}
 RANK = {"P0": 0, "P1": 1, "P2": 2, "P3": 3, "P4": 4}
 
+# Certification layers: what the engine can mechanically verify (max L4).
+# L5 (adversarial suite as a service) / L6 (live parity) / L7 (signed immutable
+# audits) are product-level and reported as NOT supported, never faked.
+LAYERS = (
+    ("L0", "STRUCTURAL", ["Data Integrity"]),
+    ("L1", "TEMPORAL", ["Look-ahead", "MTF"]),
+    ("L2", "EXECUTION", ["Execution"]),
+    ("L3", "ECONOMIC", ["Costs"]),
+    ("L4", "STATISTICAL", ["Statistics", "Robustness"]),
+)
 
-def assemble_report(strategy_name: str, sections: Dict[str, Dict], config: Dict,
-                    engine_version: str, scope: List[str]) -> Dict:
+
+def _strategy_hash(strategy: Strategy) -> Optional[str]:
+    """Source fingerprint of the strategy (name + description + run source)."""
+    try:
+        src = inspect.getsource(strategy.run)
+    except (OSError, TypeError):
+        src = None
+    if src is None:
+        return None                      # black-box / REPL / lambda run
+    blob = f"{strategy.name}|{strategy.description}|{src}"
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
+
+def _data_hash(df: pd.DataFrame) -> Optional[str]:
+    """Full-frame OHLC fingerprint (index + OHLC)."""
+    try:
+        cols = [c for c in ("open", "high", "low", "close") if c in df.columns]
+        sub = df[cols]
+        h = pd.util.hash_pandas_object(sub, index=True)
+        h_np = h.to_numpy()          # ExtensionArray -> ndarray for tobytes()
+        return hashlib.sha256(h_np.tobytes()).hexdigest()
+    except Exception:
+        return None
+
+
+def certification_level(sections: Dict[str, Dict], scope: List[str]) -> Dict:
+    """Highest CONTINUOUS layer whose every in-scope section is verified clean.
+
+    A layer is certified only if all of its sections were audited (in scope),
+    every one is PASS/VERIFIED, and no P0/P1 finding sits in the layer. A gap
+    stops the climb - no skipping ahead to a higher layer.
+    """
+    level, reason = "NONE", None
+    for lid, name, secs in LAYERS:
+        missing = [s for s in secs if s not in scope]
+        if missing:
+            reason = f"{lid} {name}: section(s) {missing} out of scope"
+            break
+        layer_issues = [i for s in secs for i in sections.get(s, {}).get("issues", [])
+                        if i.get("severity") in ("P0", "P1")]
+        unclean = [s for s in secs if sections.get(s, {}).get("status")
+                   not in ("PASS", "VERIFIED")]
+        if unclean or layer_issues:
+            reason = f"{lid} {name}: not clean " \
+                     f"(status {unclean}, {len(layer_issues)} P0/P1)"
+            break
+        level = lid
+    return {"level": level, "reason": reason,
+            "max_supported_level": "L4",
+            "signed": False,
+            "signature_note": "immutable signed audits need a key infrastructure "
+                              "(L7 on the product roadmap)"}
+
+
+def assemble_report(strategy: Strategy, sections: Dict[str, Dict], config: Dict,
+                    engine_version: str, scope: List[str],
+                    df: Optional[pd.DataFrame] = None) -> Dict:
     issues: List[Dict] = []
     for sname, sec in sections.items():
         for i in sec.get("issues", []):
@@ -101,9 +174,12 @@ def assemble_report(strategy_name: str, sections: Dict[str, Dict], config: Dict,
                           "and no P0/P1 finding was made. (Scope: " +
                           ", ".join(scope) + ".)")
 
+    cert = certification_level(sections, scope)
+    strat_hash = _strategy_hash(strategy)
+    data_hash = _data_hash(df) if df is not None else None
     return {
         "engine_version": engine_version,
-        "strategy": strategy_name,
+        "strategy": strategy.name,
         "scope": list(scope),
         "overall": overall,
         "audit_complete": overall == "PASS",
@@ -117,6 +193,19 @@ def assemble_report(strategy_name: str, sections: Dict[str, Dict], config: Dict,
         "sections": {k: {kk: vv for kk, vv in v.items()} for k, v in sections.items()},
         "issues": issues_sorted,
         "recommendation": recommendation,
+        "certification": {
+            "audit_id": f"QBV-{datetime.now(timezone.utc):%Y%m%d}-"
+                        f"{secrets.token_hex(4)}",
+            "generated_at": datetime.now(timezone.utc)
+                            .isoformat(timespec="seconds"),
+            "strategy_hash": strat_hash,
+            "strategy_hash_note": (None if strat_hash else
+                                   "black-box run: source fingerprint unavailable"),
+            "data_hash": data_hash,
+            "data_hash_note": "full-frame OHLC fingerprint (index + OHLC)" if df is not None
+                              else "no frame supplied",
+            **cert,
+        },
         "config_summary": {k: v for k, v in config.items()
                            if k in ("seed", "n_shuffles", "oos_frac",
                                     "expansion_confirmation")},
@@ -156,6 +245,13 @@ def audit_report_text(report: Dict) -> str:
     L.append(f"Interpretation  : {interp[0]}" if interp else "Interpretation  :")
     for more in interp[1:]:
         L.append(f"                  {more}")
+    cert = report.get("certification") or {}
+    if cert.get("level") not in (None, "NONE"):
+        L.append(f"Certified       : {cert['level']} of {cert['max_supported_level']} "
+                 f"(continuous verified layers; L5-L7 = product roadmap)")
+    else:
+        stop = cert.get("reason") or "first layer not fully verified"
+        L.append(f"Certified       : NO - {stop}")
     L.append(f"Verified Score  : {report['verified_score']}/100 "
              f"(over VERIFIED scope only)")
     L.append(f"Audit Coverage  : {report['coverage_pct']}%")

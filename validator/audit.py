@@ -20,7 +20,7 @@ from validator import (data_integrity, execution, lookahead, statistics,
 from validator import report as report_mod
 from validator.types import DataSpec, Strategy, default_config
 
-ENGINE_VERSION = "3.7.0"
+ENGINE_VERSION = "3.8.0"
 
 ALL_SECTIONS = ["Data Integrity", "Look-ahead", "Execution", "Statistics",
                 "Robustness", "Costs", "MTF"]
@@ -52,7 +52,8 @@ def audit(strategy: Strategy, df: pd.DataFrame,
                          f"{cfg.get('scope')!r} (known: {ALL_SECTIONS})")
 
     sections = _build_sections(strategy, df, spec, cfg, scope)
-    return report_mod.assemble_report(strategy.name, sections, cfg, ENGINE_VERSION, scope)
+    return report_mod.assemble_report(strategy, sections, cfg, ENGINE_VERSION,
+                                      scope, df)
 
 
 def audit_text(strategy: Strategy, df: pd.DataFrame,

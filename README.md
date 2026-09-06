@@ -22,7 +22,7 @@ print(audit_text(strategy, df, ...))
 ```bash
 python3 examples/audit_demo.py                   # two full client-style reports -> ./reports/
 python3 examples/demo.py                         # six mechanistic archetypes (primitives)
-python3 -m unittest discover -s tests -v         # 183 unit tests (adversarial + V3 engines)
+python3 -m unittest discover -s tests -v         # 193 unit tests (adversarial + V3 engines)
 ```
 
 ## What it is (and is not)
@@ -53,7 +53,7 @@ quant-backtest-validator/
 │   ├── audit.py           # audit() / audit_text() entry points
 │   └── types.py           # Strategy / DataSpec contracts
 ├── examples/  (audit_demo.py, demo.py)
-├── tests/     (183 unit tests)
+├── tests/     (193 unit tests)
 └── reports/   (sample JSON reports produced by audit_demo.py)
 ```
 
@@ -119,11 +119,12 @@ Costs: no config ⇒ `NOT VERIFIED` · config ⇒ `DECLARED` · `independently_v
 ```
 QUANT BACKTEST VALIDATION REPORT
 Strategy : EMA-trend (next-open, hold 5)
-Engine   : 3.4.2
+Engine   : 3.8.0
 ============================================================
 Overall Verdict : INCOMPLETE
 Interpretation  : No defect in the verified scope, but key dimensions were not
                   verified - missing evidence is not a clean bill.
+Certified       : L0 of L4 (continuous verified layers; L5-L7 = product roadmap)
 Verified Score  : 93/100 (over VERIFIED scope only)
 Audit Coverage  : 86%
 Blocking        : P0=0  P1=0  P2=1
@@ -302,6 +303,26 @@ adversarial perturbation, and requires the outputs to DIFFER.
 * Un-declared contract ⇒ `provenance: NOT VERIFIED` (reported in the parameter-freeze
   note), never a fabricated PASS/FAIL and no verdict impact on black-box strategies.
 
+## V3.8 — Certification contract (audit anchors + continuous L0-L4)
+
+Every report now carries a `certification` block:
+
+* **Audit anchors** — `audit_id` (`QBV-<date>-<hex>`, unique per run), `generated_at`,
+  `strategy_hash` (sha256 of name+description+run *source*; degrades to `None` with a note
+  when the source is unavailable — REPL/exec'd runs are not faked), `data_hash` (sha256 of
+  the full-frame OHLC fingerprint). Same inputs ⇒ same hashes; a one-tick frame change ⇒ a
+  different `data_hash`, so a third party can anchor "this report is about this exact
+  code + data".
+* **Continuous certification level** — L0 STRUCTURAL (Data Integrity) · L1 TEMPORAL
+  (Look-ahead + MTF) · L2 EXECUTION · L3 ECONOMIC (Costs) · L4 STATISTICAL (Statistics +
+  Robustness). A layer is certified only when every one of its sections was audited (in
+  scope), verified (PASS/VERIFIED), and carries no P0/P1. A missing or unclean layer stops
+  the climb — no skipping to a higher layer. The text report shows `Certified : Lx of L4`
+  or `Certified : NO - <reason>`.
+* **Honest ceiling** — L5 (adversarial suite as a service), L6 (live parity), L7 (signed
+  immutable audits) are declared product-roadmap: `signed: false` and `max_supported_level:
+  L4` are fixed fields, never faked.
+
 ## V3.3 — OOS / Walk-Forward research contract
 
 Activated by `config["oos"]`. Three machine contracts:
@@ -373,7 +394,7 @@ one case to budget for — drop `n_shuffles` or vectorise, don't silently skip R
 | Full `mypy --strict` cleanup | roadmap — needs report-container TypedDicts across the engine (heterogeneous report dicts currently use `Dict[str, Any]` deliberately) |
 | Instrument realism (V3.6) | ✅ `DataSpec` qty_step/min_qty/min_notional/contract_size; EXEC_QTY_STEP/EXEC_MIN_QTY/EXEC_MIN_NOTIONAL; volume-aware impact (`volume_linear`); partial-fill/queue declared NOT VERIFIED (intrabar engine stays roadmap) |
 | Parameter provenance (V3.7) | ✅ `Strategy.fit_is` + `accepts_frozen` contract; frozen-vs-adversarial injection probe → PARAM_PROVENANCE P0 on hidden refit; frozen_hash into OOS evidence |
-| Certification contract (V3.8) | **planned** — audit_id / generated_at / strategy_hash / data_hash anchors; L0-L4 certification level over sections (L5 adversarial suite, L6 live parity, L7 signed immutable audits: engine max L4, higher levels are product roadmap) |
+| Certification contract (V3.8) | ✅ audit_id / generated_at / strategy_hash / data_hash anchors; continuous L0-L4 certification level over sections (L5 adversarial suite, L6 live parity, L7 signed immutable audits: engine max L4, higher levels are product roadmap) |
 | Statistical significance certification (V3.9+) | **planned** — multiple-testing correction · White's Reality Check / SPA · Deflated & Probabilistic Sharpe Ratio · regime/bootstrap block dependence (own workstream before implementation) |
 
 ## Who's Using This
