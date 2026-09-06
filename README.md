@@ -22,7 +22,7 @@ print(audit_text(strategy, df, ...))
 ```bash
 python3 examples/audit_demo.py                   # two full client-style reports -> ./reports/
 python3 examples/demo.py                         # six mechanistic archetypes (primitives)
-python3 -m unittest discover -s tests -v         # 193 unit tests (adversarial + V3 engines)
+python3 -m unittest discover -s tests -v         # 207 unit tests (adversarial + V3 engines)
 ```
 
 ## What it is (and is not)
@@ -53,7 +53,7 @@ quant-backtest-validator/
 │   ├── audit.py           # audit() / audit_text() entry points
 │   └── types.py           # Strategy / DataSpec contracts
 ├── examples/  (audit_demo.py, demo.py)
-├── tests/     (193 unit tests)
+├── tests/     (207 unit tests)
 └── reports/   (sample JSON reports produced by audit_demo.py)
 ```
 

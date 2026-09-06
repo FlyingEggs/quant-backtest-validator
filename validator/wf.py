@@ -78,7 +78,14 @@ def _provenance_probe(strategy: Strategy, df: pd.DataFrame, split: int,
     r_adv = run_metrics(strategy, frame, adv_p)
     same = (_pnl(r_fp) == _pnl(r_adv) and
             r_fp.get("trades") == r_adv.get("trades"))
-    if same and int(r_fp.get("trades", 0)) > 0:
+    if int(r_fp.get("trades", 0)) <= 0:
+        # no OOS trades to compare -> injection respected-ness is UNVERIFIABLE.
+        # identical zero-trade outputs under both injections prove nothing about
+        # whether the strategy uses the frozen params; PASS would be a fake clean.
+        return {"status": "NOT VERIFIED",
+                "reason": "no OOS trades under the frozen parameters - cannot "
+                          "compare frozen vs adversarial injection"}
+    if same:
         return {"status": "FAIL",
                 "finding": f"OOS output is IDENTICAL under frozen-IS parameters "
                            f"({_param_hash(fp_is)}) and adversarial injection "
@@ -225,8 +232,9 @@ def parameter_freeze_audit(strategy: Strategy, df: pd.DataFrame,
                     out["provenance"] = "FAIL"
                     out["issues"].append({"code": "PARAM_PROVENANCE", "severity": "P0",
                                           "finding": prov["finding"]})
-                else:
+                elif prov["status"] == "PASS":
                     out["provenance"] = "PASS"
+                # NOT VERIFIED keeps the honest default (no trades to compare)
     return out
 
 
