@@ -33,8 +33,26 @@ def check(strategy: Strategy, df, spec: DataSpec, config: Dict) -> Dict:
                         "not assessable"}],
             "notes": ["return per-trade rets to enable N_eff"]}
 
-    rep = core.return_independence(rets, verbose=False)
     issues, notes = [], []
+    # ---- V4.1: rets must be the per-trade returns the strategy claims. If
+    # trades=100 but len(rets)=50 (or rets are daily/aggregated bars), N_eff is
+    # computed on the wrong sample - reported, never silently blessed. The
+    # reference is the CLOSED ledger (trades_log) when present (a still-open
+    # position is counted in `trades` but has no return yet), else the reported
+    # trade count.
+    n_rets = len(rets)
+    ledger = res.get("trades_log")
+    ref_n = len(ledger) if ledger is not None else int(res.get("trades", 0))
+    if ref_n > 0 and n_rets != ref_n:
+        src = "trades_log entries" if ledger is not None else "reported trades"
+        issues.append({"code": "STAT_RETS_TRADE_MISMATCH", "severity": "P1",
+                       "finding": f"strategy reports {ref_n} {src} but "
+                                  f"len(rets)={n_rets} - rets are not one-per-trade; "
+                                  f"N_eff below is computed on a mis-sized sample"})
+        notes.append(f"return_unit assumed 'trade' but len(rets)={n_rets} != "
+                     f"{src}={ref_n}; declare return_unit explicitly to verify")
+
+    rep = core.return_independence(rets, verbose=False)
 
     if rep["verdict"] == "AUTOCORRELATED" and rep["n_eff"] is not None:
         r = rep["n_eff"] / rep["n"]
@@ -56,4 +74,6 @@ def check(strategy: Strategy, df, spec: DataSpec, config: Dict) -> Dict:
     else:
         status = "PASS"
         notes.append(f"N_eff={rep['n_eff']} / n={rep['n']}")
+    if any(i["severity"] == "P1" for i in issues):
+        status = "CONDITIONAL PASS"      # P1 findings must not read as a clean PASS
     return {"status": status, "issues": issues, "notes": notes, "evidence": rep}

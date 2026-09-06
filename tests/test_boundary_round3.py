@@ -26,11 +26,13 @@ def plain_run(df, params, with_log=False):
     rets = np.random.default_rng(3).normal(0, 1, 200).tolist()
     res = {"pnl": 10.0, "trades": 200, "rets": rets}
     if with_log:
+        # ledger consistent with the headline: 200 legs, +0.05 gross each = pnl 10
         ts = df.index.to_numpy() if isinstance(df.index, pd.DatetimeIndex) else None
         res["trades_log"] = [{"side": "long", "qty": 1.0,
-                              "signal_ts": ts[0], "entry_ts": ts[1],
-                              "exit_ts": ts[2],
-                              "entry_price": 100.0, "exit_price": 101.0}]
+                              "signal_ts": ts[0], "entry_ts": ts[min(i + 1, n - 1)],
+                              "exit_ts": ts[min(i + 2, n - 1)],
+                              "entry_price": 100.0, "exit_price": 100.05}
+                             for i in range(200)]
     return res
 
 

@@ -22,7 +22,7 @@ print(audit_text(strategy, df, ...))
 ```bash
 python3 examples/audit_demo.py                   # two full client-style reports -> ./reports/
 python3 examples/demo.py                         # six mechanistic archetypes (primitives)
-python3 -m unittest discover -s tests -v         # 243 unit tests (adversarial + V3/V4 engines)
+python3 -m unittest discover -s tests -v         # 257 unit tests (adversarial + V3/V4 engines)
 ```
 
 ## What it is (and is not)
@@ -54,7 +54,7 @@ quant-backtest-validator/
 │   ├── audit.py           # audit() / audit_text() entry points
 │   └── types.py           # Strategy / DataSpec contracts
 ├── examples/  (audit_demo.py, demo.py)
-├── tests/     (243 unit tests)
+├── tests/     (257 unit tests)
 └── reports/   (sample JSON reports produced by audit_demo.py)
 ```
 
@@ -380,6 +380,33 @@ chains the **result** to the inputs:
 
 Hash detects change; it does not prevent regeneration. L7 (signed immutable audits /
 append-only store) stays on the roadmap — the README does not claim it.
+
+## V4.1 — Integrity chain (ledger / WF-frozen / MTF-CLOSE / temporal contracts)
+
+External-audit round; each item was reproduced as a real gap before fixing:
+
+* **Ledger ↔ headline PnL consistency** — Costs now checks that the strategy's
+  *reported* `pnl` equals the gross PnL implied by its own `trades_log`. A strategy
+  claiming `pnl=999999` with a 1-unit ledger was VERIFIED before; now it is
+  **P0 `TRADE_LEDGER_PNL_MISMATCH`**, FAIL — the ledger is authoritative, the claim is
+  checked. (Ledger → cost engine → net chain is now anchored at the top.)
+* **Walk-Forward runs on frozen IS-fit parameters** — when the provenance contract is
+  declared (`fit_is` + `accepts_frozen`), every WF window now executes
+  `IS → fit_is(IS) → frozen params → OOS` (previously OOS used `default_params` and
+  `fit_is` only fed a separate probe). Each window reports `params_source`
+  (`frozen_fit` / `fit_error` / `defaults`) and its `frozen_params_hash`; no contract ⇒
+  defaults, and the source is stated per window.
+* **MTF truly honours CLOSE timestamps** — `temporal_availability(..., semantics)`
+  implements both conventions: OPEN ⇒ decision at `idx+low_seconds`, high closes at
+  `idx_h+frame_seconds`; CLOSE ⇒ decision at `idx` (the bar closed AT the stamp), high
+  closes at `idx_h`, opened at `idx_h-frame_seconds`. `mtf.check` passes
+  `DataSpec.bar_timestamp_semantics` through — same frame can be PASS under CLOSE and NOT
+  PASS under OPEN, proving the semantics drives the computation, not a warning.
+* **Trade/return/data temporal contracts** — Statistics requires
+  `len(rets) == trades` (`STAT_RETS_TRADE_MISMATCH`, P1; N_eff on a mis-sized sample is
+  reported, never blessed); Data Integrity checks expected bar spacing against
+  `DataSpec.bar_seconds` (`DATA_NONUNIFORM`, P2, with gap/missing stats) — non-uniform
+  5m/35m/5m series no longer pass silently.
 
 ## V3.3 — OOS / Walk-Forward research contract
 

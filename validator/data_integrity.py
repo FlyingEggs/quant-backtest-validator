@@ -37,6 +37,25 @@ def check(df: pd.DataFrame, spec=None) -> Dict:
                                       "timelines model timestamps as bar OPEN; a "
                                       "CLOSE-indexed frame needs explicit shifting "
                                       "before temporal checks are meaningful"})
+        # V4.1: expected bar spacing. A non-uniform series (5m,5m,35m,5m) breaks
+        # indicators / MTF / holding time / OOS boundaries / financing regardless
+        # of monotonicity - report the gap statistics, never assume uniformity.
+        expected = float(getattr(spec, "bar_seconds", 0) or 0)
+        if expected > 0 and len(df.index) > 1:
+            diffs_s = np.diff(df.index.asi8) / 1e9  # type: ignore[attr-defined]
+            gaps = diffs_s / expected
+            uneven = gaps[(gaps > 1.5) | (gaps < 0.5)]
+            if len(uneven):
+                n_missing = int(np.maximum(np.round(uneven - 1.0), 0).sum())
+                issues.append({"code": "DATA_NONUNIFORM", "severity": "P2",
+                               "finding": f"{len(uneven)}/{len(gaps)} bar gaps deviate "
+                                          f"from expected {expected:g}s - max gap "
+                                          f"{float(gaps.max()):g}x, ~{n_missing} missing "
+                                          f"bar(s) implied; temporal contract "
+                                          f"(indicator/MTF/holding/OOS/financing) "
+                                          f"degrades"})
+                notes.append(f"bar spacing: expected={expected:g}s median="
+                             f"{float(np.median(diffs_s)):g}s max={float(diffs_s.max()):g}s")
 
     missing = [c for c in REQUIRED_COLS if c not in df.columns]
     if missing:

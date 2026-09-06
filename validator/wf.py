@@ -262,8 +262,26 @@ def walk_forward_audit(strategy: Strategy, df: pd.DataFrame,
             break
         lo_s, hi_s = float(times[o_start]), float(times[o_end - 1]) + 1.0
 
-        # IS window: full history up to cutoff (warm from sample start)
-        is_res = run_metrics(strategy, df.iloc[:o_start])
+        # ---- V4.1: WF runs on FROZEN IS-fit parameters when the provenance
+        # contract is declared (IS -> fit_is() -> frozen -> OOS). Without the
+        # contract it falls back to defaults and SAYS SO per window.
+        fit = getattr(strategy, "fit_is", None)
+        frozen = None
+        params_source = "defaults"
+        if fit is not None and strategy.accepts_frozen:
+            try:
+                frozen = dict(fit(df.iloc[:o_start]) or {})
+                frozen.pop("_from_bar", None)
+                frozen.pop("_frozen", None)
+                params_source = "frozen_fit"
+            except Exception as e:
+                params_source = f"fit_error: {type(e).__name__}"
+        params = dict(frozen if frozen is not None
+                      else (strategy.default_params or {}))
+
+        # IS window: full history up to cutoff, run under the same (frozen or
+        # default) parameters so IS/OOS share one parameter source.
+        is_res = run_metrics(strategy, df.iloc[:o_start], params)
         is_trades = is_res.get("trades_log") or []
         is_f = filter_trades(is_trades, float(times[0]), lo_s, policy)
         is_m = _sum_pnl(is_f["kept"])
@@ -271,12 +289,11 @@ def walk_forward_audit(strategy: Strategy, df: pd.DataFrame,
         # OOS window: warm-up context (full history) when supported, else cold slice.
         # _from_bar = o_start-1 so a signal on the LAST IS bar (whose fill lands at the
         # OOS open) is generated; the boundary policy then decides where it belongs.
-        params = dict(strategy.default_params or {})
         if supports:
             params["_from_bar"] = max(0, o_start - 1)
             oos_res = run_metrics(strategy, df.iloc[:o_end], params)
         else:
-            oos_res = run_metrics(strategy, df.iloc[o_start:o_end])
+            oos_res = run_metrics(strategy, df.iloc[o_start:o_end], params)
         oos_trades = oos_res.get("trades_log") or []
         oos_f = filter_trades(oos_trades, lo_s, hi_s, policy)
         oos_m = _sum_pnl(oos_f["kept"])
@@ -295,7 +312,10 @@ def walk_forward_audit(strategy: Strategy, df: pd.DataFrame,
                      "oos_pnl": round(oos_m["pnl"], 2), "oos_trades": oos_m["trades"],
                      "oos_pnl_per_trade": (round(oos_pt, 4) if oos_pt is not None else None),
                      "status": status, "cross_boundary": crossed,
-                     "policy": policy})
+                     "policy": policy,
+                     "params_source": params_source,
+                     "frozen_params_hash": (_param_hash(frozen) if frozen is not None
+                                            else None)})
 
     scored = [r for r in rows if r["status"] != "INSUFFICIENT"]
     positive = sum(1 for r in scored if (r["oos_pnl_per_trade"] or 0) > 0)

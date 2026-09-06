@@ -121,7 +121,8 @@ class TestCostStatusConsistency(unittest.TestCase):
         df = D.regime_trend_df(n=600)
 
         def run(frame, params):
-            return {"pnl": 10.0, "trades": 5,
+            # ledger-consistent: 5 legs x gross 10 = 50
+            return {"pnl": 50.0, "trades": 5,
                     "trades_log": [tr(ts=False) for _ in range(5)]}
         strat = Strategy(name="no-ts", run=run, entry_semantics="next_open")
         rep = audit(strat, df, SPEC, {"scope": ["Costs"], "seed": 1,

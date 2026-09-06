@@ -10,7 +10,7 @@ States:
 
 from __future__ import annotations
 
-from typing import Dict
+from typing import Dict, Optional
 
 from validator import costengine
 from validator.types import Strategy, run_metrics
@@ -28,7 +28,8 @@ def _instrument_dict(spec) -> Dict:
     return out
 
 
-def _gate(cost: Dict, trades_log, spec=None) -> Dict:
+def _gate(cost: Dict, trades_log, spec=None,
+          reported_pnl: Optional[float] = None) -> Dict:
     """Shared tail: static config gate + net-engine status mapping.
 
     Status rules:
@@ -65,6 +66,25 @@ def _gate(cost: Dict, trades_log, spec=None) -> Dict:
     if inst:
         net_cfg["instrument"] = inst      # V3.6: DataSpec instrument contract
     net = costengine.net_audit(trades_log, net_cfg)
+    # ---- V4.1 ledger integrity: the strategy's REPORTED pnl must equal the
+    # gross PnL implied by its own per-trade ledger. A strategy may claim any
+    # headline number while returning a tiny/empty ledger - two disconnected
+    # worlds - so the ledger is validated against the claim, P0.
+    if reported_pnl is not None:
+        ledger_gross = net["gross_pnl"]
+        tol = max(1e-6, abs(ledger_gross) * 1e-6)
+        if abs(reported_pnl - ledger_gross) > tol:
+            return {"status": "FAIL",
+                    "issues": [{"code": "TRADE_LEDGER_PNL_MISMATCH",
+                                "severity": "P0",
+                                "finding": f"strategy reports pnl {reported_pnl:,.2f} "
+                                           f"but its trades_log implies a gross "
+                                           f"ledger PnL of {ledger_gross:,.2f} - "
+                                           f"reported performance is disconnected "
+                                           f"from the trade ledger; the ledger is "
+                                           f"authoritative"}],
+                    "notes": ["ledger-integrity check failed: headline PnL != "
+                              "Σ(trade gross)"]}
     notes.append(f"net PnL {net['net_pnl']:,.2f} vs gross {net['gross_pnl']:,.2f} "
                  f"(cost drag {net['cost_drag_pct']}%)")
     notes.append("sub-models: " + ", ".join(f"{k}={v}" for k, v in
@@ -102,7 +122,8 @@ def net_check(strategy: Strategy, df, config: Dict, spec=None) -> Dict:
                                        "reported PnL is gross; treat as NOT VERIFIED"}],
                 "notes": ["supply config['cost'] with fee/slippage/funding to verify"]}
     res = run_metrics(strategy, df)
-    return _gate(cost, res.get("trades_log"), spec)
+    reported = float(res.get("pnl", 0.0)) if res.get("pnl") is not None else None
+    return _gate(cost, res.get("trades_log"), spec, reported)
 
 
 def costs_check(config: Dict) -> Dict:

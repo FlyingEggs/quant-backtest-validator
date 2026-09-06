@@ -49,8 +49,17 @@ def _transform_high(high_value: pd.Series, transform) -> pd.Series:
 
 def temporal_availability(df: pd.DataFrame, col: str,
                           high_df: pd.DataFrame, frame_seconds: int,
-                          low_seconds: int, transform=None) -> Dict:
-    """Core engine. Returns the attribution report (pure, unit-testable)."""
+                          low_seconds: int, transform=None,
+                          semantics: str = "OPEN") -> Dict:
+    """Core engine. Returns the attribution report (pure, unit-testable).
+
+    semantics = bar-timestamp convention of BOTH frames (DataSpec
+    bar_timestamp_semantics):
+      OPEN  : index = bar open   -> decision at idx+low_seconds (bar close),
+              high closes at idx_h+frame_seconds
+      CLOSE : index = bar close  -> decision at idx (bar closed AT the stamp),
+              high closes at idx_h, high opened at idx_h-frame_seconds
+    """
     if col not in df.columns:
         return {"verdict": "NOT VERIFIED", "reason": f"column '{col}' not on low frame",
                 "issues": []}
@@ -60,17 +69,28 @@ def temporal_availability(df: pd.DataFrame, col: str,
                 "issues": []}
     value_col = high_df.columns[0] if "close" not in high_df.columns else "close"
     high_val = _transform_high(high_df[value_col], transform)
-    high_open = high_idx.values.astype("datetime64[ns]")
-    high_close = high_open + np.timedelta64(frame_seconds, "s")
 
     low_idx = pd.DatetimeIndex(df.index)
-    t_dec = low_idx.values.astype("datetime64[ns]") + np.timedelta64(low_seconds, "s")
+    if semantics == "CLOSE":
+        # index = bar CLOSE: a bar's close is known AT its stamp, so the decision
+        # time is the stamp itself; the high frame's index is its close time and
+        # its open was one frame earlier.
+        t_dec = low_idx.values.astype("datetime64[ns]")
+        high_open_t = high_idx.values.astype("datetime64[ns]") - \
+            np.timedelta64(frame_seconds, "s")
+        high_close_t = high_idx.values.astype("datetime64[ns]")
+    else:                                   # OPEN (default)
+        t_dec = low_idx.values.astype("datetime64[ns]") + \
+            np.timedelta64(low_seconds, "s")
+        high_open_t = high_idx.values.astype("datetime64[ns]")
+        high_close_t = high_idx.values.astype("datetime64[ns]") + \
+            np.timedelta64(frame_seconds, "s")
     sig = df[col].to_numpy(dtype=float)
 
     # last high bar with open <= t_dec (may still be forming)
-    n_naive = np.searchsorted(high_open, t_dec, side="right") - 1
+    n_naive = np.searchsorted(high_open_t, t_dec, side="right") - 1
     # last high bar with close <= t_dec (definitely closed)
-    n_legal = np.searchsorted(high_close, t_dec, side="right") - 1
+    n_legal = np.searchsorted(high_close_t, t_dec, side="right") - 1
 
     naive_val = np.full(len(df), np.nan)
     legal_val = np.full(len(df), np.nan)
@@ -145,7 +165,9 @@ def check(df: pd.DataFrame, spec: DataSpec, config: Dict) -> Dict:
                 "notes": []}
     rep = temporal_availability(df, m["col"], spec.timeframes[name],
                                 int(m.get("frame_seconds", 0)),
-                                spec.bar_seconds, transform=m.get("transform"))
+                                spec.bar_seconds, transform=m.get("transform"),
+                                semantics=getattr(spec, "bar_timestamp_semantics",
+                                                  "OPEN"))
     tr = m.get("transform")
     if callable(tr):
         # a custom callable transform may embed future access (e.g. shift(-1)) and

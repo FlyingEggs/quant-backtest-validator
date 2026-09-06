@@ -108,7 +108,8 @@ class TestInstrumentThroughAudit(unittest.TestCase):
         df = D.regime_trend_df(n=600)
 
         def run(frame, params):
-            return {"pnl": 5.0, "trades": 3,
+            # ledger-consistent: 3 legs of qty 1.237 x gross 10 = 37.11
+            return {"pnl": 37.11, "trades": 3,
                     "trades_log": [tr(qty=1.237) for _ in range(3)]}
         strat = Strategy(name="ghost", run=run, entry_semantics="next_open")
         cfg = {"scope": ["Costs"], "seed": 1,
@@ -134,7 +135,8 @@ class TestInstrumentThroughAudit(unittest.TestCase):
         df = D.regime_trend_df(n=600)
 
         def run(frame, params):
-            return {"pnl": 5.0, "trades": 3,
+            # ledger-consistent: 3 legs of qty 1.2 x gross 10 = 36.0
+            return {"pnl": 36.0, "trades": 3,
                     "trades_log": [tr(qty=1.2) for _ in range(3)]}
         strat = Strategy(name="lot", run=run, entry_semantics="next_open")
         rep = audit(strat, df, spec, {"scope": ["Costs"], "seed": 1,
