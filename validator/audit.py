@@ -21,7 +21,7 @@ from validator import manifest as manifest_mod
 from validator import report as report_mod
 from validator.types import DataSpec, Strategy, default_config
 
-ENGINE_VERSION = "3.9.0"
+ENGINE_VERSION = "4.0.0"
 
 ALL_SECTIONS = ["Data Integrity", "Look-ahead", "Execution", "Statistics",
                 "Robustness", "Costs", "MTF"]
@@ -61,6 +61,12 @@ def audit(strategy: Strategy, df: pd.DataFrame,
     rep["manifest"] = manifest_mod.build_manifest(strategy, df, spec, cfg,
                                                   ENGINE_VERSION, scope)
     rep["manifest_hash"] = rep["manifest"]["manifest_hash"]
+    # V4.0: chain the RESULT to the manifest - tampering with the report's
+    # verdict/findings/metrics is detected by evidence_hash even when inputs are
+    # untouched (hash only detects change; L7 signing remains on the roadmap).
+    ev = manifest_mod.evidence_hash_from_report(rep)
+    rep["result_hash"] = ev["result_hash"]
+    rep["evidence_hash"] = ev["evidence_hash"]
     return rep
 
 

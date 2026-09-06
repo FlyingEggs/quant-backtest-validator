@@ -22,7 +22,7 @@ print(audit_text(strategy, df, ...))
 ```bash
 python3 examples/audit_demo.py                   # two full client-style reports -> ./reports/
 python3 examples/demo.py                         # six mechanistic archetypes (primitives)
-python3 -m unittest discover -s tests -v         # 227 unit tests (adversarial + V3 engines)
+python3 -m unittest discover -s tests -v         # 243 unit tests (adversarial + V3/V4 engines)
 ```
 
 ## What it is (and is not)
@@ -54,7 +54,7 @@ quant-backtest-validator/
 │   ├── audit.py           # audit() / audit_text() entry points
 │   └── types.py           # Strategy / DataSpec contracts
 ├── examples/  (audit_demo.py, demo.py)
-├── tests/     (227 unit tests)
+├── tests/     (243 unit tests)
 └── reports/   (sample JSON reports produced by audit_demo.py)
 ```
 
@@ -354,6 +354,33 @@ different `default_params`/`param_grid`/contracts collided too. V3.9 fixes that 
 `certification.strategy_hash` remains the identity blob (name+desc+source) for
 back-compat; the manifest fields are the authoritative evidence anchors.
 
+## V4.0 — Result/evidence chain + environment fingerprint
+
+The manifest was *input* evidence; a forged JSON verdict was still undetectable. V4.0
+chains the **result** to the inputs:
+
+* **`result_hash`** — canonical projection of what the audit concluded: overall verdict,
+  verified score/coverage, blocking counts, certification level, every section status,
+  sorted (severity, code) findings, N_eff/n and net/gross PnL. **`evidence_hash`** =
+  sha256(manifest_hash ‖ result_hash). A tampered `overall`/finding/status/metric now
+  fails `verify_evidence()` even when the inputs were never touched.
+* **Environment fingerprint** — python/platform/OS class/machine + numpy/pandas/scipy
+  versions land inside the manifest (hostname excluded, so replay survives moving between
+  machines). A dependency bump changes `manifest_hash`.
+* **Callable tokens carry environment, not just source** — module + qualname + source-hash
+  + `__closure__` cell values (canonicalised, no pickle). Same `def run` with a different
+  captured `coeff` now produces a different `strategy_source_hash`.
+  **Documented boundary:** module-GLOBAL drift (e.g. an `IMPACT_COEFF` read from globals)
+  is invisible on the function object — keep mutable dependencies in params/closures.
+* **`frame_hash` is self-contained** — column names, per-column dtype, index
+  dtype/timezone and all values: int64 vs float64, float32 vs float64 and tz-aware vs
+  naive indexes no longer collide at the frame level. Object columns of non-basic types
+  whose repr embeds addresses make the hash unstable **by design** (replay fails honestly
+  → normalise such columns).
+
+Hash detects change; it does not prevent regeneration. L7 (signed immutable audits /
+append-only store) stays on the roadmap — the README does not claim it.
+
 ## V3.3 — OOS / Walk-Forward research contract
 
 Activated by `config["oos"]`. Three machine contracts:
@@ -428,6 +455,7 @@ one case to budget for — drop `n_shuffles` or vectorise, don't silently skip R
 | Certification contract (V3.8) | ✅ audit_id / generated_at / strategy_hash / data_hash anchors; continuous L0-L4 certification level over sections (L5 adversarial suite, L6 live parity, L7 signed immutable audits: engine max L4, higher levels are product roadmap) |
 | Statistical significance certification (V3.9+) | **planned** — multiple-testing correction · White's Reality Check / SPA · Deflated & Probabilistic Sharpe Ratio · regime/bootstrap block dependence (own workstream before implementation) |
 | Audit manifest / replay (V3.9) | ✅ `validator/manifest.py` — canonical serialisation (dict order / float hex / nan / Timestamp stable); full-frame `data_hash` (every column incl volume/signal, not just OHLC); `strategy_source_hash` + `strategy_contract_hash` (defaults/grid/fit_is/bt sources); `dataspec_hash` (incl MTF frames); `config_hash`/`cost_hash`/`random_seed`; `manifest_hash` + `verify_manifest()` replay; report carries `manifest` + top-level `manifest_hash` |
+| Result/evidence chain + env fingerprint (V4.0) | ✅ `result_hash` (verdicts/findings/statuses/metrics/cert level) chained to `manifest_hash` → `evidence_hash`; `verify_evidence()` catches forged JSON verdicts; environment (python/platform/numpy/pandas/scipy) in manifest; callable tokens carry module/qualname/source/**closure values**; `frame_hash` self-contained (dtype/index-tz); module-global drift = documented boundary |
 
 ## Who's Using This
 
