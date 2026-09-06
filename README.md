@@ -22,7 +22,7 @@ print(audit_text(strategy, df, ...))
 ```bash
 python3 examples/audit_demo.py                   # two full client-style reports -> ./reports/
 python3 examples/demo.py                         # six mechanistic archetypes (primitives)
-python3 -m unittest discover -s tests -v         # 207 unit tests (adversarial + V3 engines)
+python3 -m unittest discover -s tests -v         # 227 unit tests (adversarial + V3 engines)
 ```
 
 ## What it is (and is not)
@@ -50,10 +50,11 @@ quant-backtest-validator/
 │   ├── surface.py          # V3.4 2D parameter surface (plateau/island/ridge) + clustering
 │   ├── mtf.py             # V3 temporal-availability engine (legal vs naive)
 │   ├── report.py          # verdict assembly, reliability score, text render
+│   ├── manifest.py         # V3.9 audit input manifest (canonical hashes + replay)
 │   ├── audit.py           # audit() / audit_text() entry points
 │   └── types.py           # Strategy / DataSpec contracts
 ├── examples/  (audit_demo.py, demo.py)
-├── tests/     (207 unit tests)
+├── tests/     (227 unit tests)
 └── reports/   (sample JSON reports produced by audit_demo.py)
 ```
 
@@ -323,6 +324,36 @@ Every report now carries a `certification` block:
   immutable audits) are declared product-roadmap: `signed: false` and `max_supported_level:
   L4` are fixed fields, never faked.
 
+## V3.9 — Audit Input Manifest & replay (the evidence chain)
+
+The old certification anchors hashed only *strategy source + OHLC*: two audits with
+identical OHLC but different `volume`/`signal` (which change `volume_linear` impact and
+every signal-driven check) collided, and two strategies sharing `run()` source but with
+different `default_params`/`param_grid`/contracts collided too. V3.9 fixes that with a
+**canonical input manifest** (`validator/manifest.py`):
+
+* **Canonical serialisation** — dicts hash key-sorted, floats via `float.hex()` (exact;
+  nan/inf spelled out), pandas Timestamps / numpy scalars normalise to one spelling, so
+  `{"a": 1, "b": 2}` == `{"b": 2, "a": 1}`, `100.0` == `1e2`, and hashes survive
+  JSON/pandas round-trips.
+* **Full-frame `data_hash`** — every column (OHLC + volume + signal + auxiliaries) plus
+  the index, not just OHLC. Same OHLC, 100x volume ⇒ different hash.
+* **`strategy_source_hash`** (run source, honest `UNAVAILABLE:<qualname>` token when no
+  source exists) **+ `strategy_contract_hash`** (name/description/entry_semantics/
+  supports_from_bar/accepts_frozen/signal_col/default_params/param_grid + fit_is &
+  bt_mechanism sources) — source and contract are now *separate* fingerprints.
+* **`dataspec_hash`** (spec fields **and** every MTF timeframe frame),
+  **`config_hash`** + **`cost_hash`** + **`random_seed`** + **`scope`**.
+* **`manifest_hash`** = sha256 over the canonicalised manifest; `verify_manifest()`
+  recomputes every fingerprint from (strategy, df, spec, cfg, engine_version) and reports
+  exactly which fields drifted — the **replay check**. `audit()` attaches `manifest` +
+  top-level `manifest_hash` to every report (json-safe); `audit_id` stays run-unique while
+  `manifest_hash` is run-independent, so a third party can replay
+  *same code + data + spec + config ⇒ same manifest*.
+
+`certification.strategy_hash` remains the identity blob (name+desc+source) for
+back-compat; the manifest fields are the authoritative evidence anchors.
+
 ## V3.3 — OOS / Walk-Forward research contract
 
 Activated by `config["oos"]`. Three machine contracts:
@@ -396,6 +427,7 @@ one case to budget for — drop `n_shuffles` or vectorise, don't silently skip R
 | Parameter provenance (V3.7) | ✅ `Strategy.fit_is` + `accepts_frozen` contract; frozen-vs-adversarial injection probe → PARAM_PROVENANCE P0 on hidden refit; frozen_hash into OOS evidence |
 | Certification contract (V3.8) | ✅ audit_id / generated_at / strategy_hash / data_hash anchors; continuous L0-L4 certification level over sections (L5 adversarial suite, L6 live parity, L7 signed immutable audits: engine max L4, higher levels are product roadmap) |
 | Statistical significance certification (V3.9+) | **planned** — multiple-testing correction · White's Reality Check / SPA · Deflated & Probabilistic Sharpe Ratio · regime/bootstrap block dependence (own workstream before implementation) |
+| Audit manifest / replay (V3.9) | ✅ `validator/manifest.py` — canonical serialisation (dict order / float hex / nan / Timestamp stable); full-frame `data_hash` (every column incl volume/signal, not just OHLC); `strategy_source_hash` + `strategy_contract_hash` (defaults/grid/fit_is/bt sources); `dataspec_hash` (incl MTF frames); `config_hash`/`cost_hash`/`random_seed`; `manifest_hash` + `verify_manifest()` replay; report carries `manifest` + top-level `manifest_hash` |
 
 ## Who's Using This
 

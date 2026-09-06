@@ -53,13 +53,12 @@ def _strategy_hash(strategy: Strategy) -> Optional[str]:
 
 
 def _data_hash(df: pd.DataFrame) -> Optional[str]:
-    """Full-frame OHLC fingerprint (index + OHLC)."""
+    """Full-frame fingerprint - EVERY column (OHLC, volume, signal, auxiliaries)
+    plus the index - via the V3.9 canonical frame hash. Same OHLC with different
+    volume or signal must NOT collide."""
     try:
-        cols = [c for c in ("open", "high", "low", "close") if c in df.columns]
-        sub = df[cols]
-        h = pd.util.hash_pandas_object(sub, index=True)
-        h_np = h.to_numpy()          # ExtensionArray -> ndarray for tobytes()
-        return hashlib.sha256(h_np.tobytes()).hexdigest()
+        from validator.manifest import frame_hash
+        return frame_hash(df)
     except Exception:
         return None
 
@@ -202,7 +201,7 @@ def assemble_report(strategy: Strategy, sections: Dict[str, Dict], config: Dict,
             "strategy_hash_note": (None if strat_hash else
                                    "black-box run: source fingerprint unavailable"),
             "data_hash": data_hash,
-            "data_hash_note": "full-frame OHLC fingerprint (index + OHLC)" if df is not None
+            "data_hash_note": "full-frame fingerprint (every column + index)" if df is not None
                               else "no frame supplied",
             **cert,
         },

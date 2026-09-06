@@ -17,10 +17,11 @@ import pandas as pd
 
 from validator import (data_integrity, execution, lookahead, statistics,
                        robustness, costs, mtf)
+from validator import manifest as manifest_mod
 from validator import report as report_mod
 from validator.types import DataSpec, Strategy, default_config
 
-ENGINE_VERSION = "3.8.0"
+ENGINE_VERSION = "3.9.0"
 
 ALL_SECTIONS = ["Data Integrity", "Look-ahead", "Execution", "Statistics",
                 "Robustness", "Costs", "MTF"]
@@ -52,8 +53,15 @@ def audit(strategy: Strategy, df: pd.DataFrame,
                          f"{cfg.get('scope')!r} (known: {ALL_SECTIONS})")
 
     sections = _build_sections(strategy, df, spec, cfg, scope)
-    return report_mod.assemble_report(strategy, sections, cfg, ENGINE_VERSION,
-                                      scope, df)
+    rep = report_mod.assemble_report(strategy, sections, cfg, ENGINE_VERSION,
+                                     scope, df)
+    # V3.9: the audit input manifest is the reproducible evidence anchor -
+    # replayable fingerprint of code + data + spec + config, independent of the
+    # run-time audit_id.
+    rep["manifest"] = manifest_mod.build_manifest(strategy, df, spec, cfg,
+                                                  ENGINE_VERSION, scope)
+    rep["manifest_hash"] = rep["manifest"]["manifest_hash"]
+    return rep
 
 
 def audit_text(strategy: Strategy, df: pd.DataFrame,
